@@ -1,22 +1,44 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { motion } from "framer-motion";
 import JSZip from "jszip";
-import { useSiteUpload } from "@/hooks/useSiteUpload";
+import { useSiteZip } from "@/hooks/useSiteZip";
+import { useSynapseClient } from "@/hooks/useSynapseClient";
 
 export default function SiteGenPage() {
   const [prompt, setPrompt] = useState("");
   const [htmlContent, setHtmlContent] = useState("");
   const [zipSize, setZipSize] = useState(0);
-  const { isConnected } = useAccount();
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState("");
+  const [uploadedPieceCid, setUploadedPieceCid] = useState("");
+  const [balances, setBalances] = useState({ usdfc: "0", fil: "0" });
+  const [isLoadingBalances, setIsLoadingBalances] = useState(false);
+  const { isConnected, address } = useAccount();
 
-  const { uploadSiteMutation, uploadedInfo, handleReset: resetUpload, status, progress } =
-    useSiteUpload();
+  const { getZipBytes, fileList } = useSiteZip(htmlContent);
+  const { getBalances, ensureDeposited, ensureAllowances, uploadBytes } = useSynapseClient();
 
-  const { isPending: isUploading, mutateAsync: uploadSite } =
-    uploadSiteMutation;
+  // Load balances when connected
+  useEffect(() => {
+    const loadBalances = async () => {
+      if (!isConnected) return;
+      
+      setIsLoadingBalances(true);
+      try {
+        const balanceData = await getBalances();
+        setBalances(balanceData);
+      } catch (error) {
+        console.error("Failed to load balances:", error);
+      } finally {
+        setIsLoadingBalances(false);
+      }
+    };
+    
+    loadBalances();
+  }, [isConnected, getBalances]);
 
   const generateHTML = (userPrompt: string): string => {
     return `<!DOCTYPE html>
@@ -124,16 +146,63 @@ export default function SiteGenPage() {
   const handleStoreWithSynapse = async () => {
     if (!htmlContent) return;
     
-    const zip = new JSZip();
-    zip.file("index.html", htmlContent);
-    zip.file("README.md", `# Generated Website\n\nPrompt: "${prompt}"\n\nGenerated on: ${new Date().toISOString()}\n`);
+    setIsUploading(true);
+    setUploadStatus("🔄 Preparing site for upload...");
+    setUploadedPieceCid("");
     
-    const zipBlob = await zip.generateAsync({ type: "blob" });
-    const zipFile = new File([zipBlob], `site-${Date.now()}.zip`, {
-      type: "application/zip"
-    });
-    
-    await uploadSite(zipFile);
+    try {
+      // Step 1: Build ZIP bytes
+      setUploadStatus("📦 Building ZIP archive...");
+      const zipBytes = await getZipBytes();
+      
+      // Step 2: Ensure minimum deposit (5 USDFC)
+      setUploadStatus("💰 Ensuring USDFC deposit...");
+      await ensureDeposited("5");
+      
+      // Step 3: Set allowances
+      setUploadStatus("🔐 Setting storage allowances...");
+      await ensureAllowances({
+        rate: "0.02",
+        lock: "5", 
+        maxLockEpochs: 86400n
+      });
+      
+      // Step 4: Upload bytes to Filecoin
+      setUploadStatus("🚀 Uploading to Filecoin...");
+      const result = await uploadBytes(zipBytes);
+      
+      // Step 5: Success!
+      setUploadedPieceCid(result.pieceCid);
+      setUploadStatus("🎉 Successfully stored on Filecoin Onchain Cloud!");
+      
+      // Refresh balances
+      try {
+        const updatedBalances = await getBalances();
+        setBalances(updatedBalances);
+      } catch (error) {
+        console.warn("Failed to refresh balances:", error);
+      }
+      
+    } catch (error: any) {
+      console.error("Upload failed:", error);
+      
+      // Provide helpful error messages
+      let errorMessage = "❌ Upload failed: ";
+      
+      if (error.message.includes("Insufficient USDFC")) {
+        errorMessage += "Not enough USDFC tokens. Get test USDFC from the Calibration faucet: https://forest-explorer.chainsafe.dev/faucet/calibnet_usdfc";
+      } else if (error.message.includes("allowance")) {
+        errorMessage += "Storage allowances need to be set. Please try again.";
+      } else if (error.message.includes("connect")) {
+        errorMessage += "Please connect your wallet first.";
+      } else {
+        errorMessage += error.message || "Please try again.";
+      }
+      
+      setUploadStatus(errorMessage);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleDownloadZip = async () => {
@@ -158,7 +227,8 @@ export default function SiteGenPage() {
     setPrompt("");
     setHtmlContent("");
     setZipSize(0);
-    resetUpload();
+    setUploadStatus("");
+    setUploadedPieceCid("");
   };
 
   return (
@@ -185,7 +255,42 @@ export default function SiteGenPage() {
         )}
 
         {isConnected && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <>
+            {/* Status Panel */}
+            <div className="bg-gray-50 border rounded-lg p-4 mb-6">
+              <h3 className="text-lg font-semibold mb-3">📊 Status</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div>
+                  <span className="font-medium text-gray-600">Address:</span>
+                  <p className="font-mono text-xs break-all">{address}</p>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-600">USDFC Balance:</span>
+                  <p className={`font-medium ${
+                    isLoadingBalances 
+                      ? "text-gray-400" 
+                      : parseFloat(balances.usdfc) >= 5 
+                        ? "text-green-600" 
+                        : "text-red-600"
+                  }`}>
+                    {isLoadingBalances ? "Loading..." : `${parseFloat(balances.usdfc).toFixed(2)} USDFC`}
+                  </p>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-600">FIL Balance:</span>
+                  <p className="font-medium text-gray-700">
+                    {isLoadingBalances ? "Loading..." : `${parseFloat(balances.fil).toFixed(4)} FIL`}
+                  </p>
+                </div>
+              </div>
+              {parseFloat(balances.usdfc) < 5 && !isLoadingBalances && (
+                <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+                  ⚠️ You need at least 5 USDFC for storage. Get test tokens: <a href="https://forest-explorer.chainsafe.dev/faucet/calibnet_usdfc" target="_blank" className="underline">USDFC Faucet</a>
+                </div>
+              )}
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Left Panel - Controls */}
             <div className="space-y-4">
               <div>
@@ -219,14 +324,14 @@ export default function SiteGenPage() {
               <div className="flex gap-2">
                 <button
                   onClick={handleStoreWithSynapse}
-                  disabled={!htmlContent || isUploading || !!uploadedInfo}
+                  disabled={!htmlContent || isUploading || !!uploadedPieceCid}
                   className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                    !htmlContent || isUploading || uploadedInfo
+                    !htmlContent || isUploading || uploadedPieceCid
                       ? "bg-gray-200 text-gray-400 cursor-not-allowed"
                       : "bg-green-500 text-white hover:bg-green-600"
                   }`}
                 >
-                  {isUploading ? "Storing..." : "Store with Synapse"}
+                  {isUploading ? "Storing..." : uploadedPieceCid ? "Stored!" : "Store with Synapse"}
                 </button>
                 <button
                   onClick={handleDownloadZip}
@@ -244,6 +349,11 @@ export default function SiteGenPage() {
               {zipSize > 0 && (
                 <div className="text-sm text-gray-600">
                   ZIP size: {zipSize.toLocaleString()} bytes
+                  {fileList.length > 0 && (
+                    <div className="mt-1">
+                      Files: {fileList.join(", ")}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -259,47 +369,44 @@ export default function SiteGenPage() {
                 Reset
               </button>
 
-              {status && (
+              {uploadStatus && (
                 <div className="mt-4">
                   <p
                     className={`text-sm ${
-                      status.includes("❌")
+                      uploadStatus.includes("❌")
                         ? "text-red-500"
-                        : status.includes("✅") || status.includes("🎉")
+                        : uploadStatus.includes("✅") || uploadStatus.includes("🎉")
                         ? "text-green-500"
                         : "text-gray-600"
                     }`}
                   >
-                    {status}
+                    {uploadStatus}
                   </p>
                   {isUploading && (
                     <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
-                      <div
-                        className="bg-green-500 h-2.5 rounded-full transition-all duration-500"
-                        style={{ width: `${progress}%` }}
-                      ></div>
+                      <div className="bg-blue-500 h-2.5 rounded-full animate-pulse"></div>
                     </div>
                   )}
                 </div>
               )}
 
-              {uploadedInfo && !isUploading && (
+              {uploadedPieceCid && !isUploading && (
                 <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-4">
                   <h4 className="font-semibold mb-2 text-green-800">
-                    ✅ Site Stored Successfully!
+                    🎉 Stored on Filecoin Onchain Cloud!
                   </h4>
                   <div className="text-sm text-green-700">
                     <div>
-                      <span className="font-medium">File:</span> {uploadedInfo.fileName}
+                      <span className="font-medium">Files:</span> {fileList.join(", ")}
                     </div>
                     <div>
-                      <span className="font-medium">Size:</span> {uploadedInfo.fileSize?.toLocaleString()} bytes
+                      <span className="font-medium">ZIP Size:</span> {zipSize.toLocaleString()} bytes
                     </div>
                     <div className="break-all">
-                      <span className="font-medium">Piece CID:</span> {uploadedInfo.pieceCid}
+                      <span className="font-medium">Piece CID:</span> {uploadedPieceCid}
                     </div>
-                    <div className="break-all">
-                      <span className="font-medium">Tx Hash:</span> {uploadedInfo.txHash}
+                    <div className="mt-2 p-2 bg-blue-50 rounded text-blue-700">
+                      💡 Your static site is now permanently stored on Filecoin's decentralized network!
                     </div>
                   </div>
                 </div>
@@ -324,7 +431,8 @@ export default function SiteGenPage() {
                 )}
               </div>
             </div>
-          </div>
+            </div>
+          </>
         )}
       </motion.div>
     </div>
