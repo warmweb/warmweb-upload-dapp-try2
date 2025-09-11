@@ -31,7 +31,7 @@ export default function SiteGenPage() {
   // Load balances when connected
   useEffect(() => {
     const loadBalances = async () => {
-      if (!isConnected) return;
+      if (!isConnected || balances !== null) return;
       
       setIsLoadingBalances(true);
       try {
@@ -45,7 +45,7 @@ export default function SiteGenPage() {
     };
     
     loadBalances();
-  }, [isConnected, getBalances]);
+  }, [isConnected, balances]);
 
   const generateHTML = (userPrompt: string): string => {
     return `<!DOCTYPE html>
