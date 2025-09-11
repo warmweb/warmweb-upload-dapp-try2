@@ -16,10 +16,27 @@ export default function SiteGenPage() {
   const [uploadedPieceCid, setUploadedPieceCid] = useState("");
   const [balances, setBalances] = useState({ usdfc: "0", fil: "0" });
   const [isLoadingBalances, setIsLoadingBalances] = useState(false);
+  const [checklistStatus, setChecklistStatus] = useState({
+    walletConnected: false,
+    onCalibration: false,
+    hasEnoughFil: false,
+    hasEnoughUsdfc: false,
+    warmStorageApproved: false,
+  });
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+  const [isFixing, setIsFixing] = useState<string | null>(null);
   const { isConnected, address, chainId } = useAccount();
 
   const { getZipBytes, fileList } = useSiteZip(htmlContent);
-  const { getBalances, ensureDeposited, ensureAllowances, uploadBytes, checkAllowanceStatus } = useSynapseClient();
+  const { 
+    getBalances, 
+    ensureDeposited, 
+    ensureAllowances, 
+    uploadBytes, 
+    checkAllowanceStatus,
+    checkWarmStorageAllowances,
+    checkUSDFCDeposit
+  } = useSynapseClient();
 
   // Network-specific token names and faucets
   const isCalibration = chainId === 314159;
@@ -46,6 +63,48 @@ export default function SiteGenPage() {
     
     loadBalances();
   }, [isConnected, balances]);
+
+  // Check all requirements for upload
+  const checkUploadRequirements = async () => {
+    if (!isConnected) {
+      setChecklistStatus({
+        walletConnected: false,
+        onCalibration: false,
+        hasEnoughFil: false,
+        hasEnoughUsdfc: false,
+        warmStorageApproved: false,
+      });
+      return;
+    }
+
+    setIsCheckingStatus(true);
+    try {
+      const [balanceData, usdcDeposit, warmStorageStatus] = await Promise.all([
+        getBalances().catch(() => ({ usdfc: "0", fil: "0" })),
+        checkUSDFCDeposit().catch(() => ({ hasEnoughDeposit: false, currentDeposit: "0", needed: "5" })),
+        checkWarmStorageAllowances().catch(() => ({ hasRateAllowance: false, hasLockupAllowance: false, rateAllowance: "0", lockupAllowance: "0" }))
+      ]);
+
+      setChecklistStatus({
+        walletConnected: true,
+        onCalibration: chainId === 314159,
+        hasEnoughFil: parseFloat(balanceData.fil) >= 0.1,
+        hasEnoughUsdfc: usdcDeposit.hasEnoughDeposit,
+        warmStorageApproved: warmStorageStatus.hasRateAllowance && warmStorageStatus.hasLockupAllowance,
+      });
+    } catch (error) {
+      console.error("Failed to check requirements:", error);
+    } finally {
+      setIsCheckingStatus(false);
+    }
+  };
+
+  // Check requirements when connected or when HTML content changes
+  useEffect(() => {
+    if (isConnected && htmlContent) {
+      checkUploadRequirements();
+    }
+  }, [isConnected, chainId, htmlContent]);
 
   const generateHTML = (userPrompt: string): string => {
     return `<!DOCTYPE html>
@@ -286,6 +345,44 @@ export default function SiteGenPage() {
     setUploadedPieceCid("");
   };
 
+  // Fix functions for checklist items
+  const handleFixUSDFC = async () => {
+    setIsFixing("usdfc");
+    try {
+      await ensureDeposited("5");
+      await checkUploadRequirements(); // Recheck status
+    } catch (error: any) {
+      console.error("Failed to deposit USDFC:", error);
+      setUploadStatus(`❌ Failed to deposit USDFC: ${error.message}`);
+    } finally {
+      setIsFixing(null);
+    }
+  };
+
+  const handleFixWarmStorage = async () => {
+    setIsFixing("warmstorage");
+    try {
+      await ensureAllowances({
+        rate: "0.02",
+        lock: "5", 
+        maxLockEpochs: 86400n
+      });
+      await checkUploadRequirements(); // Recheck status
+    } catch (error: any) {
+      console.error("Failed to approve Warm Storage:", error);
+      setUploadStatus(`❌ Failed to approve Warm Storage: ${error.message}`);
+    } finally {
+      setIsFixing(null);
+    }
+  };
+
+  // Check if ready to upload
+  const isReadyToUpload = checklistStatus.walletConnected && 
+                         checklistStatus.onCalibration && 
+                         checklistStatus.hasEnoughFil && 
+                         checklistStatus.hasEnoughUsdfc && 
+                         checklistStatus.warmStorageApproved;
+
   return (
     <div className="container mx-auto p-6 max-w-6xl">
       <motion.div
@@ -388,15 +485,127 @@ export default function SiteGenPage() {
                 </button>
               </div>
 
-              <div className="flex gap-2">
+              {/* Upload Checklist */}
+              {htmlContent && (
+                <div className="mt-6 border rounded-lg p-4 bg-gray-50">
+                  <h4 className="font-semibold mb-3 text-gray-800">📋 Upload Requirements</h4>
+                  <div className="space-y-2">
+                    {/* Wallet Connected */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={checklistStatus.walletConnected ? "text-green-600" : "text-red-600"}>
+                          {checklistStatus.walletConnected ? "✅" : "❌"}
+                        </span>
+                        <span className="text-sm">Wallet connected (Calibration)</span>
+                      </div>
+                      {!checklistStatus.walletConnected && (
+                        <div className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">
+                          Connect to Calibration testnet
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Network Check */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={checklistStatus.onCalibration ? "text-green-600" : "text-red-600"}>
+                          {checklistStatus.onCalibration ? "✅" : "❌"}
+                        </span>
+                        <span className="text-sm">On Filecoin Calibration</span>
+                      </div>
+                      {!checklistStatus.onCalibration && isConnected && (
+                        <div className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">
+                          Switch to Calibration network
+                        </div>
+                      )}
+                    </div>
+
+                    {/* FIL Balance */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={checklistStatus.hasEnoughFil ? "text-green-600" : "text-red-600"}>
+                          {checklistStatus.hasEnoughFil ? "✅" : "❌"}
+                        </span>
+                        <span className="text-sm">{filTokenName} for fees present (≥0.1)</span>
+                      </div>
+                      {!checklistStatus.hasEnoughFil && isConnected && (
+                        <a 
+                          href={filFaucetUrl} 
+                          target="_blank" 
+                          className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded hover:bg-blue-200"
+                        >
+                          Get {filTokenName}
+                        </a>
+                      )}
+                    </div>
+
+                    {/* USDFC Deposit */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={checklistStatus.hasEnoughUsdfc ? "text-green-600" : "text-red-600"}>
+                          {checklistStatus.hasEnoughUsdfc ? "✅" : "❌"}
+                        </span>
+                        <span className="text-sm">USDFC ≥5 deposited</span>
+                      </div>
+                      {!checklistStatus.hasEnoughUsdfc && isConnected && (
+                        <button
+                          onClick={handleFixUSDFC}
+                          disabled={isFixing === "usdfc"}
+                          className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded hover:bg-yellow-200 disabled:opacity-50"
+                        >
+                          {isFixing === "usdfc" ? "Depositing..." : "Deposit USDFC"}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Warm Storage Approval */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={checklistStatus.warmStorageApproved ? "text-green-600" : "text-red-600"}>
+                          {checklistStatus.warmStorageApproved ? "✅" : "❌"}
+                        </span>
+                        <span className="text-sm">Warm Storage approved</span>
+                      </div>
+                      {!checklistStatus.warmStorageApproved && isConnected && (
+                        <button
+                          onClick={handleFixWarmStorage}
+                          disabled={isFixing === "warmstorage"}
+                          className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded hover:bg-orange-200 disabled:opacity-50"
+                        >
+                          {isFixing === "warmstorage" ? "Approving..." : "Approve Warm Storage"}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Ready Status */}
+                    <div className="flex items-center justify-between pt-2 border-t">
+                      <div className="flex items-center gap-2">
+                        <span className={isReadyToUpload ? "text-green-600" : "text-yellow-600"}>
+                          {isReadyToUpload ? "✅" : "⏳"}
+                        </span>
+                        <span className="text-sm font-medium">Ready to upload</span>
+                        {isCheckingStatus && <span className="text-xs text-gray-500">(checking...)</span>}
+                      </div>
+                      {isReadyToUpload && (
+                        <div className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                          All requirements met!
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2 mt-4">
                 <button
                   onClick={handleStoreWithSynapse}
-                  disabled={!htmlContent || isUploading || !!uploadedPieceCid}
+                  disabled={!htmlContent || isUploading || !!uploadedPieceCid || !isReadyToUpload}
                   className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                    !htmlContent || isUploading || uploadedPieceCid
+                    !htmlContent || isUploading || uploadedPieceCid || !isReadyToUpload
                       ? "bg-gray-200 text-gray-400 cursor-not-allowed"
                       : "bg-green-500 text-white hover:bg-green-600"
                   }`}
+                  title={!isReadyToUpload ? "Complete all requirements above first" : ""}
                 >
                   {isUploading ? "Storing..." : uploadedPieceCid ? "Stored!" : "Store with Synapse"}
                 </button>

@@ -300,6 +300,77 @@ export function useSynapseClient() {
     }
   };
 
+  /**
+   * Check if Warm Storage has sufficient allowances without uploading
+   */
+  const checkWarmStorageAllowances = async (): Promise<{
+    hasRateAllowance: boolean;
+    hasLockupAllowance: boolean;
+    rateAllowance: string;
+    lockupAllowance: string;
+  }> => {
+    if (!synapse || !address) {
+      throw new Error("Wallet not connected. Please connect your wallet to continue.");
+    }
+
+    try {
+      // Create warm storage service
+      const warmStorage = warmStorageService || await WarmStorageService.create(
+        synapse.getProvider(),
+        synapse.getWarmStorageAddress()
+      );
+
+      // Check current allowances for a small file (1KB) to test permissions
+      const testFileSize = 1024; 
+      const warmStorageBalance = await warmStorage.checkAllowanceForStorage(
+        testFileSize,
+        config.withCDN,
+        synapse.payments,
+        config.persistencePeriod
+      );
+
+      const usdfcDecimals = synapse.payments.decimals(TOKENS.USDFC);
+      
+      return {
+        hasRateAllowance: warmStorageBalance.currentRateAllowance > 0n,
+        hasLockupAllowance: warmStorageBalance.currentLockupAllowance > 0n,
+        rateAllowance: formatUnits(warmStorageBalance.currentRateAllowance, usdfcDecimals),
+        lockupAllowance: formatUnits(warmStorageBalance.currentLockupAllowance, usdfcDecimals),
+      };
+      
+    } catch (error) {
+      throw new Error(`Failed to check allowances: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  /**
+   * Check USDFC deposit status in Synapse payments
+   */
+  const checkUSDFCDeposit = async (): Promise<{
+    hasEnoughDeposit: boolean;
+    currentDeposit: string;
+    needed: string;
+  }> => {
+    if (!synapse || !address) {
+      throw new Error("Wallet not connected. Please connect your wallet to continue.");
+    }
+
+    try {
+      const currentBalance = await synapse.payments.balance(TOKENS.USDFC);
+      const usdfcDecimals = synapse.payments.decimals(TOKENS.USDFC);
+      const minNeeded = parseUnits("5", usdfcDecimals);
+      
+      return {
+        hasEnoughDeposit: currentBalance >= minNeeded,
+        currentDeposit: formatUnits(currentBalance, usdfcDecimals),
+        needed: "5",
+      };
+      
+    } catch (error) {
+      throw new Error(`Failed to check USDFC deposit: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   return {
     getBalances,
     getWarmStorageAddress,
@@ -307,5 +378,7 @@ export function useSynapseClient() {
     ensureAllowances,
     uploadBytes,
     checkAllowanceStatus,
+    checkWarmStorageAllowances,
+    checkUSDFCDeposit,
   };
 }
