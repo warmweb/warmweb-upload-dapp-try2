@@ -41,7 +41,9 @@ export default function SiteGenPage() {
     uploadBytes, 
     checkAllowanceStatus,
     checkWarmStorageAllowances,
-    checkUSDFCDeposit
+    checkUSDFCDeposit,
+    preflightUpload,
+    checkPDPServerHealth
   } = useSynapseClient();
 
   // Network-specific token names and faucets
@@ -117,10 +119,11 @@ export default function SiteGenPage() {
     if (!isConnected || !isDev) return;
 
     try {
-      const [balanceData, usdcDeposit, warmStorageStatus] = await Promise.all([
+      const [balanceData, usdcDeposit, warmStorageStatus, pdpHealth] = await Promise.all([
         getBalances().catch(() => ({ usdfc: "0", fil: "0" })),
         checkUSDFCDeposit().catch(() => ({ hasEnoughDeposit: false, currentDeposit: "0", needed: "5" })),
-        checkWarmStorageAllowances().catch(() => ({ hasRateAllowance: false, hasLockupAllowance: false, rateAllowance: "0", lockupAllowance: "0" }))
+        checkWarmStorageAllowances().catch(() => ({ hasRateAllowance: false, hasLockupAllowance: false, rateAllowance: "0", lockupAllowance: "0" })),
+        checkPDPServerHealth().catch(() => ({ healthy: false, message: "Health check failed" }))
       ]);
 
       setDebugInfo({
@@ -143,6 +146,9 @@ export default function SiteGenPage() {
         allowances: {
           warmStorage: warmStorageStatus,
           approved: warmStorageStatus.hasRateAllowance && warmStorageStatus.hasLockupAllowance
+        },
+        infrastructure: {
+          pdpServer: pdpHealth
         },
         upload: {
           lastPayloadSize: lastUploadSize,
@@ -277,30 +283,30 @@ export default function SiteGenPage() {
       const zipBytes = await getZipBytes();
       setLastUploadSize(zipBytes.length);
       
-      // Step 2: Check current allowance status
-      setUploadStatus("🔍 Checking storage requirements...");
-      const allowanceStatus = await checkAllowanceStatus(zipBytes.length);
+      // Step 2: Run preflight check to determine exact requirements
+      setUploadStatus("🔍 Running preflight check...");
+      const preflight = await preflightUpload(zipBytes.length);
       
-      if (!allowanceStatus.sufficient) {
-        setUploadStatus(`⚠️ ${allowanceStatus.message}. Setting up now...`);
+      if (!preflight.sufficient) {
+        setUploadStatus("⚠️ Insufficient allowances. Setting up with recommended values...");
         
-        // Step 3a: Ensure minimum deposit (5 USDFC)
-        if (allowanceStatus.details.needsDeposit) {
-          setUploadStatus("💰 Ensuring USDFC deposit (this may require wallet approval)...");
-          await ensureDeposited("5");
+        // Step 3a: Deposit what preflight recommends
+        if (parseFloat(preflight.depositNeeded) > 0) {
+          setUploadStatus(`💰 Depositing ${preflight.depositNeeded} USDFC (wallet approval required)...`);
+          await ensureDeposited(preflight.depositNeeded);
         }
         
-        // Step 3b: Set allowances (this will definitely require wallet approval)
-        if (allowanceStatus.details.needsRateAllowance || allowanceStatus.details.needsLockupAllowance) {
-          setUploadStatus("🔐 Setting storage allowances (wallet approval required)...");
+        // Step 3b: Set allowances with preflight recommended rates
+        if (parseFloat(preflight.rateAllowanceNeeded) > 0 || parseFloat(preflight.lockupAllowanceNeeded) > 0) {
+          setUploadStatus("🔐 Setting storage allowances with optimal rates (wallet approval required)...");
           await ensureAllowances({
-            rate: "0.02",
-            lock: "5", 
-            maxLockEpochs: 86400n
+            rate: preflight.rateAllowanceNeeded,
+            lock: preflight.lockupAllowanceNeeded, 
+            maxLockEpochs: preflight.maxLockEpochs
           });
         }
       } else {
-        setUploadStatus("✅ All allowances sufficient");
+        setUploadStatus("✅ All allowances sufficient for upload");
       }
       
       // Step 4: Upload bytes to Filecoin
@@ -414,7 +420,10 @@ export default function SiteGenPage() {
   const handleFixUSDFC = async () => {
     setIsFixing("usdfc");
     try {
-      await ensureDeposited("5");
+      // Use preflight to determine exact deposit needed for a small file
+      const preflight = await preflightUpload(1024); // 1KB estimate
+      const depositAmount = parseFloat(preflight.depositNeeded) > 0 ? preflight.depositNeeded : "5";
+      await ensureDeposited(depositAmount);
       await checkUploadRequirements(); // Recheck status
     } catch (error: any) {
       console.error("Failed to deposit USDFC:", error);
@@ -427,10 +436,12 @@ export default function SiteGenPage() {
   const handleFixWarmStorage = async () => {
     setIsFixing("warmstorage");
     try {
+      // Use preflight to determine exact allowances needed for a small file
+      const preflight = await preflightUpload(1024); // 1KB estimate
       await ensureAllowances({
-        rate: "0.02",
-        lock: "5", 
-        maxLockEpochs: 86400n
+        rate: preflight.rateAllowanceNeeded,
+        lock: preflight.lockupAllowanceNeeded, 
+        maxLockEpochs: preflight.maxLockEpochs
       });
       await checkUploadRequirements(); // Recheck status
     } catch (error: any) {
