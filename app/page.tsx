@@ -7,13 +7,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import Confetti from "@/components/ui/Confetti";
 import { useConfetti } from "@/hooks/useConfetti";
 import { DatasetsViewer } from "@/components/DatasetsViewer";
+import { SiteGenerator } from "@/components/SiteGenerator";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useBalances } from "@/hooks/useBalances";
 import Github from "@/components/ui/icons/Github";
 import Filecoin from "@/components/ui/icons/Filecoin";
 import { useRouter, useSearchParams } from "next/navigation";
 
-type Tab = "manage-storage" | "upload" | "datasets";
+type Tab = "manage-storage" | "upload" | "datasets" | "site-gen";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -46,7 +47,7 @@ export default function Home() {
   const { data: balances, isLoading: isLoadingBalances } = useBalances();
 
   const isTab = (value: string | null): value is Tab =>
-    value === "manage-storage" || value === "upload" || value === "datasets";
+    value === "manage-storage" || value === "upload" || value === "datasets" || value === "site-gen";
 
   const updateUrl = (tab: Tab) => {
     const params = new URLSearchParams(searchParams?.toString());
@@ -220,6 +221,18 @@ export default function Home() {
                 >
                   View Datasets
                 </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => handleTabChange("site-gen")}
+                  className={`flex-1 py-2 px-4 text-center border-b-2 transition-colors ${
+                    activeTab === "site-gen"
+                      ? "border-primary text-primary-foreground bg-primary"
+                      : "border-transparent text-secondary hover:text-primary hover:bg-secondary/10"
+                  }`}
+                >
+                  Site Gen
+                </motion.button>
               </motion.div>
 
               <AnimatePresence mode="wait">
@@ -250,20 +263,34 @@ export default function Home() {
                   >
                     <FileUploader />
                   </motion.div>
+                ) : activeTab === "datasets" ? (
+                  <motion.div
+                    key="datasets"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{
+                      type: "spring",
+                      stiffness: 200,
+                      damping: 20,
+                    }}
+                  >
+                    <DatasetsViewer />
+                  </motion.div>
                 ) : (
-                  activeTab === "datasets" && (
+                  activeTab === "site-gen" && (
                     <motion.div
-                      key="datasets"
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -20 }}
+                      key="site-gen"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
                       transition={{
                         type: "spring",
                         stiffness: 200,
                         damping: 20,
                       }}
                     >
-                      <DatasetsViewer />
+                      <SiteGenerator />
                     </motion.div>
                   )
                 )}

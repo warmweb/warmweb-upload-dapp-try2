@@ -9,6 +9,7 @@ This dApp showcases:
 - Installing synapse-sdk to your project.
 - Depositing funds to Synapse contracts using USDFC token.
 - Uploading files to Filecoin through Synapse
+- **NEW:** Site Gen (Synapse) - Generate static websites and store them on Filecoin
 
 ## Prerequisites
 
@@ -64,6 +65,89 @@ Shows how to:
 - Monitor upload status
 - Download filecoin from Filecoin using synapse-sdk
 - hook used to upload a file [link](https://github.com/FIL-Builders/fs-upload-dapp/blob/main/hooks/useFileUpload.ts)
+
+## Site Gen (Synapse) Demo
+
+**NEW FEATURE**: The dApp now includes a site generator that creates static websites from text prompts and stores them on Filecoin via Synapse Warm Storage.
+
+### Quick Start Flow
+
+1. **Connect Wallet** → Use RainbowKit to connect to Filecoin Calibration testnet
+2. **Navigate** → Go to `/site-gen` in the app
+3. **Generate Site** → Enter a text prompt describing your website → Click "Build Preview"
+4. **Setup Storage** (first-time users only):
+   - Deposit USDFC: Click "Deposit USDFC" button (requires 5+ USDFC)
+   - Approve Warm Storage: Click "Approve Warm Storage" button
+5. **Store with Synapse** → Click "Store with Synapse" → Copy the returned PieceCID
+6. **Verify Artifact** (optional) → Click "Download ZIP" to get the exact file stored on Filecoin
+
+### Requirements
+
+- **tFIL tokens** for gas fees (≥0.1 tFIL) → [Get tFIL](https://faucet.calibnet.chainsafe-fil.io/funds.html)
+- **USDFC tokens** for storage fees (≥5 USDFC) → [Get USDFC](https://forest-explorer.chainsafe.dev/faucet/calibnet_usdfc)
+
+### Features
+
+#### 📋 Smart Checklist
+The app shows a real-time checklist of upload requirements:
+- ✅ Wallet connected (Calibration)
+- ✅ tFIL for fees present (≥0.1)
+- ✅ USDFC ≥5 deposited
+- ✅ Warm Storage approved (rate + lockup)
+- ✅ Ready to upload
+
+#### 🔧 One-Click Fixes
+Missing requirements show "Fix" buttons:
+- **"Deposit USDFC"** → Automatically deposits 5 USDFC to Synapse
+- **"Approve Warm Storage"** → Sets up rate and lockup allowances
+- **"Get tFIL"** → Direct link to Calibration faucet
+
+#### 📦 Artifact Transparency
+- **Server-side ZIP generation** ensures consistency
+- **Download ZIP** provides the exact artifact stored on Filecoin
+- **File structure**: `index.html` + `assets/main.js` (boot script)
+
+#### 🐛 Debug Mode (Development)
+In development mode, a collapsible debug section shows:
+- Current network and signer address
+- Real-time balances and allowances
+- Upload payload size and status
+- Raw debug object for troubleshooting
+
+### Technical Implementation
+
+The Site Gen feature demonstrates:
+- **Text-to-HTML generation** with embedded CSS and Filecoin branding
+- **ZIP artifact creation** using JSZip (client + server-side)
+- **Synapse Warm Storage integration** with robust error handling
+- **Pre-flight checks** for balances, deposits, and allowances
+- **Network-aware token handling** (tFIL vs FIL, testnet vs mainnet)
+- **Progressive enhancement** with fallbacks and user guidance
+
+### Storage Process
+
+1. **HTML Generation** → Creates responsive website from user prompt
+2. **ZIP Creation** → Packages HTML + JavaScript boot script
+3. **Balance Checks** → Verifies tFIL for gas and USDFC for storage
+4. **Allowance Setup** → Ensures Warm Storage permissions (first-time only)
+5. **Filecoin Upload** → Stores ZIP via Synapse with progress tracking
+6. **PieceCID Return** → Provides unique identifier for retrieval
+
+### Error Handling
+
+The app provides human-readable error messages:
+- **"Insufficient tFIL for gas fees"** → Links to faucet
+- **"USDFC deposit needed"** → Shows fix button
+- **"Warm Storage not approved"** → Guides through approval
+- **"Network not supported"** → Suggests switching to Calibration
+
+### Notes
+
+- **Filecoin Calibration testnet only** (mainnet support can be enabled)
+- **First-time setup required** for USDFC deposit and Warm Storage approval
+- **Gas fees paid in tFIL**, storage fees paid in USDFC
+- **IPFS upload is separate** and not part of this Synapse-first flow
+- **Artifact verification** ensures transparency of stored content
 
 ## Learn More
 

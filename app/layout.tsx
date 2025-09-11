@@ -14,14 +14,16 @@ import { ConfettiProvider } from "@/providers/ConfettiProvider";
 import Footer from "@/components/ui/Footer";
 import { GeolocationProvider } from "@/providers/GeolocationProvider";
 import { SynapseProvider } from "@/providers/SynapseProvider";
+import { rpcConfig } from "@/config";
+
 const queryClient = new QueryClient();
 
 const config = createConfig({
   chains: [filecoinCalibration, filecoin],
   connectors: [],
   transports: {
-    [filecoin.id]: http(),
-    [filecoinCalibration.id]: http(),
+    [filecoin.id]: http(rpcConfig.primary.filecoinMainnet),
+    [filecoinCalibration.id]: http(rpcConfig.primary.filecoinCalibration),
   },
 });
 
