@@ -232,19 +232,50 @@ export default function SiteGenPage() {
   const handleDownloadZip = async () => {
     if (!htmlContent) return;
     
-    const zip = new JSZip();
-    zip.file("index.html", htmlContent);
-    zip.file("README.md", `# Generated Website\n\nPrompt: "${prompt}"\n\nGenerated on: ${new Date().toISOString()}\n`);
-    
-    const zipBlob = await zip.generateAsync({ type: "blob" });
-    const url = URL.createObjectURL(zipBlob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `site-${Date.now()}.zip`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    try {
+      // Use server-side ZIP generation for artifact transparency
+      const response = await fetch('/api/site-zip', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ html: htmlContent }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to generate ZIP file');
+      }
+      
+      // Get the ZIP blob from the response
+      const zipBlob = await response.blob();
+      
+      // Create download link
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `site-${Date.now()}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+    } catch (error) {
+      console.error('Download failed:', error);
+      // Fallback to client-side generation if API fails
+      const zip = new JSZip();
+      zip.file("index.html", htmlContent);
+      zip.file("README.md", `# Generated Website\n\nPrompt: "${prompt}"\n\nGenerated on: ${new Date().toISOString()}\n`);
+      
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `site-${Date.now()}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
   };
 
   const handleResetAll = () => {
@@ -377,8 +408,9 @@ export default function SiteGenPage() {
                       ? "bg-gray-200 text-gray-400 cursor-not-allowed"
                       : "bg-purple-500 text-white hover:bg-purple-600"
                   }`}
+                  title="Download the exact ZIP artifact that was uploaded to Filecoin"
                 >
-                  Download ZIP
+                  📦 Download ZIP
                 </button>
               </div>
 
@@ -390,6 +422,9 @@ export default function SiteGenPage() {
                       Files: {fileList.join(", ")}
                     </div>
                   )}
+                  <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded text-purple-700 text-xs">
+                    💡 <strong>Artifact Transparency:</strong> The "Download ZIP" button gives you the exact same file structure that was uploaded to Filecoin, ensuring full transparency of the stored artifact.
+                  </div>
                 </div>
               )}
 
