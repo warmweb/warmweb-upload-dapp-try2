@@ -722,7 +722,7 @@ export default function SiteGenPage() {
                     </div>
                   )}
                   <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded text-purple-700 text-xs">
-                    💡 <strong>Artifact Transparency:</strong> The "Download ZIP" button gives you the exact same file structure that was uploaded to Filecoin, ensuring full transparency of the stored artifact.
+                    💡 <strong>Artifact Transparency:</strong> The &quot;Download ZIP&quot; button gives you the exact same file structure that was uploaded to Filecoin, ensuring full transparency of the stored artifact.
                   </div>
                 </div>
               )}
@@ -776,7 +776,7 @@ export default function SiteGenPage() {
                       <span className="font-medium">Piece CID:</span> {uploadedPieceCid}
                     </div>
                     <div className="mt-2 p-2 bg-blue-50 rounded text-blue-700">
-                      💡 Your static site is now permanently stored on Filecoin's decentralized network!
+                      💡 Your static site is now permanently stored on Filecoin&apos;s decentralized network!
                     </div>
                   </div>
                 </div>

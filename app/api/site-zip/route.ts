@@ -53,7 +53,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
     
     // Return ZIP file with proper headers
-    return new NextResponse(zipBuffer, {
+    return new NextResponse(zipBuffer as BodyInit, {
       status: 200,
       headers: {
         'Content-Type': 'application/zip',
