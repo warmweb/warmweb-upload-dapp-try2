@@ -25,7 +25,13 @@ export default function SiteGenPage() {
   });
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [isFixing, setIsFixing] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [lastUploadSize, setLastUploadSize] = useState<number>(0);
+  const [showDebug, setShowDebug] = useState(false);
   const { isConnected, address, chainId } = useAccount();
+
+  // Check if we're in development mode
+  const isDev = process.env.NODE_ENV === 'development';
 
   const { getZipBytes, fileList } = useSiteZip(htmlContent);
   const { 
@@ -105,6 +111,55 @@ export default function SiteGenPage() {
       checkUploadRequirements();
     }
   }, [isConnected, chainId, htmlContent]);
+
+  // Collect debug information
+  const updateDebugInfo = async () => {
+    if (!isConnected || !isDev) return;
+
+    try {
+      const [balanceData, usdcDeposit, warmStorageStatus] = await Promise.all([
+        getBalances().catch(() => ({ usdfc: "0", fil: "0" })),
+        checkUSDFCDeposit().catch(() => ({ hasEnoughDeposit: false, currentDeposit: "0", needed: "5" })),
+        checkWarmStorageAllowances().catch(() => ({ hasRateAllowance: false, hasLockupAllowance: false, rateAllowance: "0", lockupAllowance: "0" }))
+      ]);
+
+      setDebugInfo({
+        network: {
+          chainId,
+          name: isCalibration ? "Filecoin Calibration (Testnet)" : "Filecoin Mainnet",
+          isCalibration
+        },
+        signer: {
+          address,
+          connected: isConnected
+        },
+        balances: {
+          wallet: balanceData,
+          synapse: {
+            usdfc: usdcDeposit.currentDeposit,
+            hasEnoughDeposit: usdcDeposit.hasEnoughDeposit
+          }
+        },
+        allowances: {
+          warmStorage: warmStorageStatus,
+          approved: warmStorageStatus.hasRateAllowance && warmStorageStatus.hasLockupAllowance
+        },
+        upload: {
+          lastPayloadSize: lastUploadSize,
+          lastUploadTime: lastUploadSize > 0 ? new Date().toISOString() : null
+        }
+      });
+    } catch (error) {
+      console.error("Failed to update debug info:", error);
+    }
+  };
+
+  // Update debug info when relevant data changes
+  useEffect(() => {
+    if (isDev && isConnected) {
+      updateDebugInfo();
+    }
+  }, [isConnected, chainId, balances, checklistStatus, lastUploadSize]);
 
   const generateHTML = (userPrompt: string): string => {
     return `<!DOCTYPE html>
@@ -220,6 +275,7 @@ export default function SiteGenPage() {
       // Step 1: Build ZIP bytes
       setUploadStatus("📦 Building ZIP archive...");
       const zipBytes = await getZipBytes();
+      setLastUploadSize(zipBytes.length);
       
       // Step 2: Check current allowance status
       setUploadStatus("🔍 Checking storage requirements...");
@@ -255,6 +311,15 @@ export default function SiteGenPage() {
       // Step 5: Success!
       setUploadedPieceCid(result.pieceCid);
       setUploadStatus("🎉 Successfully stored on Filecoin Onchain Cloud!");
+      
+      // Telemetry logging
+      console.log("📊 Upload Success:", {
+        action: "synapse_upload",
+        pieceCid: result.pieceCid,
+        sizeBytes: zipBytes.length,
+        timestamp: new Date().toISOString(),
+        network: isCalibration ? "calibration" : "mainnet"
+      });
       
       // Refresh balances
       try {
@@ -712,6 +777,99 @@ export default function SiteGenPage() {
               </div>
             </div>
             </div>
+
+            {/* Debug Section - Development Only */}
+            {isDev && isConnected && (
+              <div className="mt-6 border border-gray-300 rounded-lg bg-gray-50">
+                <button
+                  onClick={() => setShowDebug(!showDebug)}
+                  className="w-full p-3 text-left font-medium text-gray-700 hover:bg-gray-100 flex items-center justify-between"
+                >
+                  <span>🐛 Debug Information</span>
+                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                    DEV MODE
+                  </span>
+                </button>
+                
+                {showDebug && debugInfo && (
+                  <div className="p-4 border-t border-gray-200 bg-white text-xs font-mono">
+                    <div className="space-y-3">
+                      {/* Network Info */}
+                      <div>
+                        <h5 className="font-semibold text-blue-600 mb-1">Network</h5>
+                        <div className="bg-blue-50 p-2 rounded text-blue-800">
+                          <div>Chain ID: {debugInfo.network.chainId}</div>
+                          <div>Name: {debugInfo.network.name}</div>
+                          <div>Is Calibration: {debugInfo.network.isCalibration ? "Yes" : "No"}</div>
+                        </div>
+                      </div>
+
+                      {/* Signer Info */}
+                      <div>
+                        <h5 className="font-semibold text-green-600 mb-1">Signer</h5>
+                        <div className="bg-green-50 p-2 rounded text-green-800">
+                          <div>Address: {debugInfo.signer.address}</div>
+                          <div>Connected: {debugInfo.signer.connected ? "Yes" : "No"}</div>
+                        </div>
+                      </div>
+
+                      {/* Balances */}
+                      <div>
+                        <h5 className="font-semibold text-purple-600 mb-1">Balances</h5>
+                        <div className="bg-purple-50 p-2 rounded text-purple-800">
+                          <div><strong>Wallet:</strong></div>
+                          <div className="ml-2">
+                            <div>{filTokenName}: {debugInfo.balances.wallet.fil}</div>
+                            <div>USDFC: {debugInfo.balances.wallet.usdfc}</div>
+                          </div>
+                          <div className="mt-1"><strong>Synapse:</strong></div>
+                          <div className="ml-2">
+                            <div>USDFC Deposit: {debugInfo.balances.synapse.usdfc}</div>
+                            <div>Sufficient: {debugInfo.balances.synapse.hasEnoughDeposit ? "Yes" : "No"}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Allowances */}
+                      <div>
+                        <h5 className="font-semibold text-orange-600 mb-1">Allowances</h5>
+                        <div className="bg-orange-50 p-2 rounded text-orange-800">
+                          <div>Rate Allowance: {debugInfo.allowances.warmStorage.rateAllowance} USDFC</div>
+                          <div>Lockup Allowance: {debugInfo.allowances.warmStorage.lockupAllowance} USDFC</div>
+                          <div>Has Rate: {debugInfo.allowances.warmStorage.hasRateAllowance ? "Yes" : "No"}</div>
+                          <div>Has Lockup: {debugInfo.allowances.warmStorage.hasLockupAllowance ? "Yes" : "No"}</div>
+                          <div>Fully Approved: {debugInfo.allowances.approved ? "Yes" : "No"}</div>
+                        </div>
+                      </div>
+
+                      {/* Upload Info */}
+                      <div>
+                        <h5 className="font-semibold text-red-600 mb-1">Upload</h5>
+                        <div className="bg-red-50 p-2 rounded text-red-800">
+                          <div>Last Payload Size: {debugInfo.upload.lastPayloadSize.toLocaleString()} bytes</div>
+                          <div>Last Upload: {debugInfo.upload.lastUploadTime || "None"}</div>
+                          {uploadedPieceCid && (
+                            <div className="mt-1">
+                              <div>Last Piece CID: {uploadedPieceCid}</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Raw Debug Object */}
+                      <details className="mt-3">
+                        <summary className="cursor-pointer font-semibold text-gray-600 hover:text-gray-800">
+                          Raw Debug Object
+                        </summary>
+                        <pre className="mt-2 p-2 bg-gray-100 text-gray-800 text-xs overflow-auto max-h-40">
+                          {JSON.stringify(debugInfo, null, 2)}
+                        </pre>
+                      </details>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
       </motion.div>
