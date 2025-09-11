@@ -16,10 +16,17 @@ export default function SiteGenPage() {
   const [uploadedPieceCid, setUploadedPieceCid] = useState("");
   const [balances, setBalances] = useState({ usdfc: "0", fil: "0" });
   const [isLoadingBalances, setIsLoadingBalances] = useState(false);
-  const { isConnected, address } = useAccount();
+  const { isConnected, address, chainId } = useAccount();
 
   const { getZipBytes, fileList } = useSiteZip(htmlContent);
-  const { getBalances, ensureDeposited, ensureAllowances, uploadBytes } = useSynapseClient();
+  const { getBalances, ensureDeposited, ensureAllowances, uploadBytes, checkAllowanceStatus } = useSynapseClient();
+
+  // Network-specific token names and faucets
+  const isCalibration = chainId === 314159;
+  const filTokenName = isCalibration ? "tFIL" : "FIL";
+  const filFaucetUrl = isCalibration 
+    ? "https://faucet.calibnet.chainsafe-fil.io/funds.html"
+    : "https://faucet.filecoin.io/";
 
   // Load balances when connected
   useEffect(() => {
@@ -155,17 +162,31 @@ export default function SiteGenPage() {
       setUploadStatus("📦 Building ZIP archive...");
       const zipBytes = await getZipBytes();
       
-      // Step 2: Ensure minimum deposit (5 USDFC)
-      setUploadStatus("💰 Ensuring USDFC deposit...");
-      await ensureDeposited("5");
+      // Step 2: Check current allowance status
+      setUploadStatus("🔍 Checking storage requirements...");
+      const allowanceStatus = await checkAllowanceStatus(zipBytes.length);
       
-      // Step 3: Set allowances
-      setUploadStatus("🔐 Setting storage allowances...");
-      await ensureAllowances({
-        rate: "0.02",
-        lock: "5", 
-        maxLockEpochs: 86400n
-      });
+      if (!allowanceStatus.sufficient) {
+        setUploadStatus(`⚠️ ${allowanceStatus.message}. Setting up now...`);
+        
+        // Step 3a: Ensure minimum deposit (5 USDFC)
+        if (allowanceStatus.details.needsDeposit) {
+          setUploadStatus("💰 Ensuring USDFC deposit (this may require wallet approval)...");
+          await ensureDeposited("5");
+        }
+        
+        // Step 3b: Set allowances (this will definitely require wallet approval)
+        if (allowanceStatus.details.needsRateAllowance || allowanceStatus.details.needsLockupAllowance) {
+          setUploadStatus("🔐 Setting storage allowances (wallet approval required)...");
+          await ensureAllowances({
+            rate: "0.02",
+            lock: "5", 
+            maxLockEpochs: 86400n
+          });
+        }
+      } else {
+        setUploadStatus("✅ All allowances sufficient");
+      }
       
       // Step 4: Upload bytes to Filecoin
       setUploadStatus("🚀 Uploading to Filecoin...");
@@ -191,10 +212,12 @@ export default function SiteGenPage() {
       
       if (error.message.includes("Insufficient USDFC")) {
         errorMessage += "Not enough USDFC tokens. Get test USDFC from the Calibration faucet: https://forest-explorer.chainsafe.dev/faucet/calibnet_usdfc";
-      } else if (error.message.includes("allowance")) {
-        errorMessage += "Storage allowances need to be set. Please try again.";
+      } else if (error.message.includes("allowance") || error.message.includes("insufficient")) {
+        errorMessage += "Storage allowances couldn't be set. This usually means you need to approve transactions in your wallet, or you don't have enough USDFC balance. Please check your wallet and try again.";
       } else if (error.message.includes("connect")) {
         errorMessage += "Please connect your wallet first.";
+      } else if (error.message.includes("rejected") || error.message.includes("denied")) {
+        errorMessage += "Transaction was rejected in wallet. Please try again and approve the required transactions.";
       } else {
         errorMessage += error.message || "Please try again.";
       }
@@ -259,6 +282,9 @@ export default function SiteGenPage() {
             {/* Status Panel */}
             <div className="bg-gray-50 border rounded-lg p-4 mb-6">
               <h3 className="text-lg font-semibold mb-3">📊 Status</h3>
+              <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded text-sm">
+                <span className="font-medium">Network:</span> {isCalibration ? "🧪 Filecoin Calibration (Testnet)" : "🌐 Filecoin Mainnet"}
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                 <div>
                   <span className="font-medium text-gray-600">Address:</span>
@@ -277,15 +303,24 @@ export default function SiteGenPage() {
                   </p>
                 </div>
                 <div>
-                  <span className="font-medium text-gray-600">FIL Balance:</span>
+                  <span className="font-medium text-gray-600">{filTokenName} Balance:</span>
                   <p className="font-medium text-gray-700">
-                    {isLoadingBalances ? "Loading..." : `${parseFloat(balances.fil).toFixed(4)} FIL`}
+                    {isLoadingBalances ? "Loading..." : `${parseFloat(balances.fil).toFixed(4)} ${filTokenName}`}
                   </p>
                 </div>
               </div>
-              {parseFloat(balances.usdfc) < 5 && !isLoadingBalances && (
-                <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
-                  ⚠️ You need at least 5 USDFC for storage. Get test tokens: <a href="https://forest-explorer.chainsafe.dev/faucet/calibnet_usdfc" target="_blank" className="underline">USDFC Faucet</a>
+              {(parseFloat(balances.usdfc) < 5 || parseFloat(balances.fil) < 0.1) && !isLoadingBalances && (
+                <div className="mt-3 space-y-2">
+                  {parseFloat(balances.usdfc) < 5 && (
+                    <div className="p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+                      ⚠️ You need at least 5 USDFC for storage. Get test tokens: <a href="https://forest-explorer.chainsafe.dev/faucet/calibnet_usdfc" target="_blank" className="underline">USDFC Faucet</a>
+                    </div>
+                  )}
+                  {parseFloat(balances.fil) < 0.1 && (
+                    <div className="p-2 bg-red-50 border border-red-200 rounded text-sm text-red-800">
+                      🚨 You need at least 0.1 {filTokenName} for gas fees. Get test tokens: <a href={filFaucetUrl} target="_blank" className="underline">{filTokenName} Faucet</a>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

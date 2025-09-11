@@ -18,3 +18,22 @@ export const config = {
   minDaysThreshold: number;
   withCDN: boolean;
 };
+
+// RPC Configuration - Alternative endpoints for when default ones are down
+export const rpcConfig = {
+  // Primary RPC endpoints (ChainStack - generally more reliable)
+  primary: {
+    filecoinMainnet: "https://filecoin-mainnet.chainstacklabs.com/rpc/v1",
+    filecoinCalibration: "https://calibration.filfox.info/rpc/v1",
+  },
+  // Fallback RPC endpoints
+  fallback: {
+    filecoinMainnet: "https://api.node.glif.io/rpc/v1",
+    filecoinCalibration: "https://api.calibration.node.glif.io/rpc/v1",
+  },
+  // Alternative endpoints
+  alternative: {
+    filecoinMainnet: "https://rpc.ankr.com/filecoin",
+    filecoinCalibration: "https://rpc.ankr.com/filecoin_testnet",
+  }
+} as const;
