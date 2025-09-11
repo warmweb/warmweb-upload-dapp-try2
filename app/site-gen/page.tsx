@@ -191,6 +191,7 @@ export default function SiteGenPage() {
       // Step 4: Upload bytes to Filecoin
       setUploadStatus("🚀 Uploading to Filecoin...");
       const result = await uploadBytes(zipBytes);
+      console.log('result', result)
       
       // Step 5: Success!
       setUploadedPieceCid(result.pieceCid);

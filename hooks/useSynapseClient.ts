@@ -159,6 +159,7 @@ export function useSynapseClient() {
 
       // Check if we have datasets
       const datasets = await synapse.storage.findDataSets(address);
+      console.log('datasets', datasets)
       const datasetExists = datasets.length > 0;
       const includeDatasetCreationFee = !datasetExists;
 
