@@ -88,7 +88,7 @@ export function useSynapseClient() {
 
       // Check and approve USDFC spending if needed
       const paymentsAddress = synapse.getPaymentsAddress();
-      const allowance = await synapse.payments.allowance(TOKENS.USDFC, paymentsAddress);
+      const allowance = await synapse.payments.allowance(paymentsAddress);
       
       if (allowance < MAX_UINT256 / 2n) {
         const approveTx = await synapse.payments.approve(

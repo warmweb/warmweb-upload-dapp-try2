@@ -475,7 +475,32 @@ export default function SiteGenPage() {
           <>
             {/* Status Panel */}
             <div className="bg-gray-50 border rounded-lg p-4 mb-6">
-              <h3 className="text-lg font-semibold mb-3">📊 Status</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-semibold">📊 Status</h3>
+                <button
+                  onClick={async () => {
+                    setIsLoadingBalances(true);
+                    try {
+                      const balanceData = await getBalances();
+                      setBalances(balanceData);
+                      await checkUploadRequirements();
+                    } catch (error) {
+                      console.error("Failed to refresh balances:", error);
+                    } finally {
+                      setIsLoadingBalances(false);
+                    }
+                  }}
+                  disabled={isLoadingBalances}
+                  className={`px-3 py-1 text-xs rounded-lg font-medium transition-all ${
+                    isLoadingBalances
+                      ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                      : "bg-blue-500 text-white hover:bg-blue-600"
+                  }`}
+                  title="Refresh balances and status"
+                >
+                  {isLoadingBalances ? "🔄 Refreshing..." : "🔄 Refresh"}
+                </button>
+              </div>
               <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded text-sm">
                 <span className="font-medium">Network:</span> {isCalibration ? "🧪 Filecoin Calibration (Testnet)" : "🌐 Filecoin Mainnet"}
               </div>
