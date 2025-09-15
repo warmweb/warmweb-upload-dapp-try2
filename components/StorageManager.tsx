@@ -401,7 +401,7 @@ const WalletBalancesSection = ({ balances, isLoading }: SectionProps) => (
         </span>
       </div>
       <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-        <span className="text-sm text-gray-600">Warm Storage Balance</span>
+        <span className="text-sm text-gray-600">Synapse Contract Balance</span>
         <span className="font-medium text-gray-600">
           {isLoading
             ? "..."
@@ -440,10 +440,18 @@ const StorageStatusSection = ({ balances, isLoading }: SectionProps) => (
           Persistence days left at max usage (max rate:{" "}
           {balances?.currentRateAllowanceGB?.toLocaleString()} GB)
         </span>
-        <span className="font-medium text-gray-600">
+        <span className={`font-medium ${
+          isLoading ? 'text-gray-600' :
+          !balances?.persistenceDaysLeft || balances.persistenceDaysLeft < 1 ? 'text-red-600' :
+          balances.persistenceDaysLeft < 7 ? 'text-yellow-600' : 'text-green-600'
+        }`}>
           {isLoading
             ? "..."
-            : `${balances?.persistenceDaysLeft.toFixed(1)} days`}
+            : balances?.persistenceDaysLeft && balances.persistenceDaysLeft < 0.01 
+            ? `${(balances.persistenceDaysLeft * 24 * 60).toFixed(1)} minutes`
+            : balances?.persistenceDaysLeft && balances.persistenceDaysLeft < 1 
+            ? `${(balances.persistenceDaysLeft * 24).toFixed(1)} hours`
+            : `${balances?.persistenceDaysLeft?.toFixed(1) || 0} days`}
         </span>
       </div>
       <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
@@ -451,10 +459,21 @@ const StorageStatusSection = ({ balances, isLoading }: SectionProps) => (
           Persistence days left at current usage (current rate:{" "}
           {balances?.currentStorageGB?.toLocaleString()} GB)
         </span>
-        <span className="font-medium text-gray-600">
+        <span className={`font-medium ${
+          isLoading ? 'text-gray-600' :
+          balances?.persistenceDaysLeftAtCurrentRate === Infinity ? 'text-green-600' :
+          !balances?.persistenceDaysLeftAtCurrentRate || balances.persistenceDaysLeftAtCurrentRate < 1 ? 'text-red-600' :
+          balances.persistenceDaysLeftAtCurrentRate < 7 ? 'text-yellow-600' : 'text-green-600'
+        }`}>
           {isLoading
             ? "..."
-            : `${balances?.persistenceDaysLeftAtCurrentRate.toFixed(1)} days`}
+            : balances?.persistenceDaysLeftAtCurrentRate && balances.persistenceDaysLeftAtCurrentRate < 0.01 
+            ? `${(balances.persistenceDaysLeftAtCurrentRate * 24 * 60).toFixed(1)} minutes`
+            : balances?.persistenceDaysLeftAtCurrentRate && balances.persistenceDaysLeftAtCurrentRate < 1 
+            ? `${(balances.persistenceDaysLeftAtCurrentRate * 24).toFixed(1)} hours`
+            : balances?.persistenceDaysLeftAtCurrentRate === Infinity 
+            ? "∞ (no usage)"
+            : `${balances?.persistenceDaysLeftAtCurrentRate?.toFixed(1) || 0} days`}
         </span>
       </div>
     </div>

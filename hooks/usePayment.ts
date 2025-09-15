@@ -50,8 +50,8 @@ export const usePayment = () => {
       const amount = depositAmount + fee;
 
       const allowance = await synapse.payments.allowance(
-        TOKENS.USDFC,
-        paymentsAddress
+        paymentsAddress,
+        TOKENS.USDFC
       );
 
       const balance = await synapse.payments.walletBalance(TOKENS.USDFC);

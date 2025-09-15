@@ -6,6 +6,8 @@ import { motion } from "framer-motion";
 import JSZip from "jszip";
 import { useSiteZip } from "@/hooks/useSiteZip";
 import { useSynapseClient } from "@/hooks/useSynapseClient";
+import { useBalances } from "@/hooks/useBalances";
+import { TIME_CONSTANTS } from "@filoz/synapse-sdk";
 
 export default function SiteGenPage() {
   const [prompt, setPrompt] = useState("");
@@ -28,6 +30,7 @@ export default function SiteGenPage() {
   const [debugInfo, setDebugInfo] = useState<any>(null);
   const [lastUploadSize, setLastUploadSize] = useState<number>(0);
   const [showDebug, setShowDebug] = useState(false);
+  const [durationAction, setDurationAction] = useState<{ type: 'deposit' | 'store', days: number } | null>(null);
   const { isConnected, address, chainId } = useAccount();
 
   // Check if we're in development mode
@@ -43,6 +46,8 @@ export default function SiteGenPage() {
     checkWarmStorageAllowances,
     checkUSDFCDeposit
   } = useSynapseClient();
+
+  const { data: synapseBalances } = useBalances();
 
   // Network-specific token names and faucets
   const isCalibration = chainId === 314159;
@@ -410,6 +415,26 @@ export default function SiteGenPage() {
     setUploadedPieceCid("");
   };
 
+  // Handle simple deposit
+  const handleSimpleDeposit = async () => {
+    try {
+      setDurationAction({ type: 'deposit', days: 0 });
+      
+      // Deposit a fixed amount - let Synapse SDK handle the calculations
+      const depositAmount = "10"; // 10 USDFC deposit
+      await ensureDeposited(depositAmount);
+      
+      // Refresh balances
+      const updatedBalances = await getBalances();
+      setBalances(updatedBalances);
+    } catch (error) {
+      console.error('Deposit failed:', error);
+      setUploadStatus(`❌ Deposit failed: ${error.message}`);
+    } finally {
+      setDurationAction(null);
+    }
+  };
+
   // Fix functions for checklist items
   const handleFixUSDFC = async () => {
     setIsFixing("usdfc");
@@ -528,6 +553,94 @@ export default function SiteGenPage() {
                   </p>
                 </div>
               </div>
+              
+              {/* Synapse Storage Metrics */}
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 className="text-sm font-semibold text-blue-800 mb-2">📊 Synapse Storage Status</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                  <div>
+                    <span className="font-medium text-blue-700">Contract Balance:</span>
+                    <p className="font-medium text-blue-900">
+                      {synapseBalances.warmStorageBalanceFormatted.toFixed(2)} USDFC
+                    </p>
+                  </div>
+                  <div>
+                    <span className="font-medium text-blue-700">Storage Usage:</span>
+                    <p className="font-medium text-blue-900">
+                      {synapseBalances.currentStorageGB.toFixed(2)} GB
+                    </p>
+                  </div>
+                  <div>
+                    <span className="font-medium text-blue-700">Persistence:</span>
+                    <p className="font-medium text-blue-900">
+                      {synapseBalances.persistenceDaysLeft < 0.01 
+                        ? `${(synapseBalances.persistenceDaysLeft * 24 * 60).toFixed(1)} minutes`
+                        : synapseBalances.persistenceDaysLeft < 1 
+                        ? `${(synapseBalances.persistenceDaysLeft * 24).toFixed(1)} hours`
+                        : `${synapseBalances.persistenceDaysLeft.toFixed(1)} days`} remaining
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Storage Persistence Calculation Table */}
+              <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <h4 className="text-sm font-semibold text-green-800 mb-2">🕒 Storage Duration Calculator</h4>
+                <div className="text-xs text-green-700 mb-3">
+                  Based on your current lockup allowance of {(Number(synapseBalances.currentLockupAllowance) / 1e6).toFixed(2)} USDFC
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-green-300">
+                        <th className="text-left py-1 px-2 font-medium text-green-800">Size</th>
+                        <th className="text-left py-1 px-2 font-medium text-green-800">Duration</th>
+                        <th className="text-left py-1 px-2 font-medium text-green-800">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[0.001, 0.01, 0.1, 0.5, 1, 5, 10].map((sizeGB) => {
+                        // Calculate persistence time for this storage size
+                        const estimatedRateForSize = Number(synapseBalances.rateNeeded) * (sizeGB / 10); // Assuming rateNeeded is for 10GB
+                        const epochsPerDay = 2880; // Filecoin epochs per day
+                        const lockupPerDay = epochsPerDay * estimatedRateForSize;
+                        const daysForSize = lockupPerDay > 0 
+                          ? Number(synapseBalances.currentLockupAllowance) / 1e6 / (lockupPerDay / 1e6)
+                          : Infinity;
+                        
+                        const formatDuration = (days: number) => {
+                          if (days === Infinity) return "∞";
+                          if (days < 0.01) return `${(days * 24 * 60).toFixed(1)} min`;
+                          if (days < 1) return `${(days * 24).toFixed(1)} hrs`;
+                          if (days < 365) return `${days.toFixed(1)} days`;
+                          return `${(days / 365).toFixed(1)} years`;
+                        };
+                        
+                        const getStatus = (days: number) => {
+                          if (days === Infinity) return { text: "Free", color: "text-green-600" };
+                          if (days > 30) return { text: "Good", color: "text-green-600" };
+                          if (days > 7) return { text: "OK", color: "text-yellow-600" };
+                          return { text: "Low", color: "text-red-600" };
+                        };
+                        
+                        const status = getStatus(daysForSize);
+                        
+                        return (
+                          <tr key={sizeGB} className="border-b border-green-200">
+                            <td className="py-1 px-2 text-green-900">{sizeGB} GB</td>
+                            <td className="py-1 px-2 text-green-900">{formatDuration(daysForSize)}</td>
+                            <td className={`py-1 px-2 font-medium ${status.color}`}>{status.text}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-2 text-xs text-green-700">
+                  * Estimates based on current Synapse storage rates and your lockup allowance
+                </div>
+              </div>
+              
               {(parseFloat(balances.usdfc) < 5 || parseFloat(balances.fil) < 0.1) && !isLoadingBalances && (
                 <div className="mt-3 space-y-2">
                   {parseFloat(balances.usdfc) < 5 && (
@@ -682,6 +795,35 @@ export default function SiteGenPage() {
                         </div>
                       )}
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Simple Deposit Section */}
+              {htmlContent && !uploadedPieceCid && parseFloat(balances.usdfc) < 10 && (
+                <div className="mt-6 border rounded-lg p-4 bg-blue-50 border-blue-200">
+                  <h4 className="font-semibold mb-3 text-blue-800">💰 Add Storage Balance</h4>
+                  <div className="text-sm text-blue-700 mb-3">
+                    Deposit USDFC to extend your storage persistence
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="text-sm">
+                      <span className="text-blue-700">Current Balance:</span>
+                      <span className="ml-2 font-medium text-blue-900">{parseFloat(balances.usdfc).toFixed(2)} USDFC</span>
+                    </div>
+                    <button
+                      onClick={handleSimpleDeposit}
+                      disabled={isUploading || durationAction?.type === 'deposit'}
+                      className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                        isUploading || durationAction?.type === 'deposit'
+                          ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                          : "bg-blue-500 text-white hover:bg-blue-600"
+                      }`}
+                    >
+                      {durationAction?.type === 'deposit'
+                        ? "Depositing..."
+                        : "Deposit 10 USDFC"}
+                    </button>
                   </div>
                 </div>
               )}
