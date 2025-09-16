@@ -1,4 +1,8 @@
-function Filecoin() {
+interface FilecoinProps {
+  className?: string;
+}
+
+function Filecoin({ className }: FilecoinProps) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -10,6 +14,7 @@ function Filecoin() {
       height="25"
       xmlSpace="preserve"
       fill="#008cf6"
+      className={className}
     >
       <g>
         <path
