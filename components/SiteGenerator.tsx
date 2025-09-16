@@ -3,6 +3,9 @@ import { useState } from "react";
 import { useAccount } from "wagmi";
 import JSZip from "jszip";
 import { useSiteUpload } from "@/hooks/useSiteUpload";
+import { useBalances } from "@/hooks/useBalances";
+import { useSynapse } from "@/providers/SynapseProvider";
+import { TIME_CONSTANTS } from "@filoz/synapse-sdk";
 
 export const SiteGenerator = () => {
   const [prompt, setPrompt] = useState("");
@@ -13,6 +16,10 @@ export const SiteGenerator = () => {
 
   const { isPending: isGenerating, mutateAsync: generateSite } =
     uploadSiteMutation;
+
+  const { data: balances } = useBalances();
+  const { synapse } = useSynapse();
+  const [durationAction, setDurationAction] = useState<{ type: 'deposit' | 'store', days: number } | null>(null);
 
   const generateStaticSite = (userPrompt: string): JSZip => {
     const zip = new JSZip();
@@ -126,6 +133,26 @@ Storage: Filecoin via Synapse Warm Storage
     await generateSite(zipFile);
   };
 
+  // Handle simple deposit
+  const handleSimpleDeposit = async () => {
+    if (!synapse) return;
+    
+    try {
+      setDurationAction({ type: 'deposit', days: 0 });
+      
+      // Deposit a fixed amount - let Synapse SDK handle the calculations
+      const depositAmount = 10; // 10 USDFC deposit
+      await synapse.payments.deposit(BigInt(depositAmount * 1e6)); // Convert to wei
+      
+      // Refresh balances
+      window.location.reload(); // Simple refresh to update balances
+    } catch (error) {
+      console.error('Deposit failed:', error);
+    } finally {
+      setDurationAction(null);
+    }
+  };
+
   if (!isConnected) {
     return null;
   }
@@ -184,6 +211,37 @@ Storage: Filecoin via Synapse Warm Storage
         </div>
       </div>
 
+      {/* Simple Deposit Section */}
+      {prompt.trim() && !uploadedInfo && balances.warmStorageBalanceFormatted < 10 && (
+        <div className="mt-6 bg-background border border-border rounded-xl p-4 text-left">
+          <h4 className="font-semibold mb-3 text-foreground">
+            💰 Add Storage Balance
+          </h4>
+          <div className="text-sm text-muted-foreground mb-3">
+            Deposit USDFC to extend your storage persistence
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="text-sm">
+              <span className="text-muted-foreground">Current Balance:</span>
+              <span className="ml-2 font-medium">{balances.warmStorageBalanceFormatted.toFixed(2)} USDFC</span>
+            </div>
+            <button
+              onClick={handleSimpleDeposit}
+              disabled={isGenerating || durationAction?.type === 'deposit'}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                isGenerating || durationAction?.type === 'deposit'
+                  ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                  : "bg-blue-500 text-white hover:bg-blue-600"
+              }`}
+            >
+              {durationAction?.type === 'deposit'
+                ? "Depositing..."
+                : "Deposit 10 USDFC"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {status && (
         <div className="mt-4 text-center">
           <p
@@ -239,6 +297,100 @@ Storage: Filecoin via Synapse Warm Storage
               🎉 Your static site has been generated and stored on Filecoin! 
               The ZIP contains all the files needed to deploy your website.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Storage Persistence Calculation Table */}
+      {isConnected && (
+        <div className="mt-6 bg-background border border-border rounded-xl p-4 text-left">
+          <h4 className="font-semibold mb-3 text-foreground">
+            📊 Storage Duration Calculator
+          </h4>
+          <div className="text-sm text-muted-foreground mb-3">
+            Based on your current lockup allowance of {(Number(balances.currentLockupAllowance) / 1e6).toFixed(2)} USDFC
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-2 px-3 font-medium text-foreground">Storage Size</th>
+                  <th className="text-left py-2 px-3 font-medium text-foreground">Duration</th>
+                  <th className="text-left py-2 px-3 font-medium text-foreground">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[0.001, 0.01, 0.1, 0.5, 1, 5, 10].map((sizeGB) => {
+                  // Calculate persistence time for this storage size
+                  // Using the formula: days = currentLockupAllowance / (rateNeeded * epochsPerDay)
+                  // We need to estimate rate based on current usage ratio
+                  const currentUsageRatio = balances.currentStorageGB > 0 
+                    ? balances.currentStorageGB / balances.currentRateAllowanceGB 
+                    : 0.1; // Default assumption
+                  const estimatedRateForSize = Number(balances.rateNeeded) * (sizeGB / 10); // Assuming rateNeeded is for 10GB
+                  const epochsPerDay = 2880; // Filecoin epochs per day
+                  const lockupPerDay = epochsPerDay * estimatedRateForSize;
+                  const daysForSize = lockupPerDay > 0 
+                    ? Number(balances.currentLockupAllowance) / 1e6 / (lockupPerDay / 1e6)
+                    : Infinity;
+                  
+                  const formatDuration = (days: number) => {
+                    if (days === Infinity) return "∞";
+                    if (days < 0.01) return `${(days * 24 * 60).toFixed(1)} min`;
+                    if (days < 1) return `${(days * 24).toFixed(1)} hrs`;
+                    if (days < 365) return `${days.toFixed(1)} days`;
+                    return `${(days / 365).toFixed(1)} years`;
+                  };
+                  
+                  const getStatus = (days: number) => {
+                    if (days === Infinity) return { text: "No cost", color: "text-green-600" };
+                    if (days > 30) return { text: "Good", color: "text-green-600" };
+                    if (days > 7) return { text: "OK", color: "text-yellow-600" };
+                    return { text: "Low", color: "text-red-600" };
+                  };
+                  
+                  const status = getStatus(daysForSize);
+                  
+                  return (
+                    <tr key={sizeGB} className="border-b border-border/50">
+                      <td className="py-2 px-3">{sizeGB} GB</td>
+                      <td className="py-2 px-3">{formatDuration(daysForSize)}</td>
+                      <td className={`py-2 px-3 font-medium ${status.color}`}>{status.text}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-3 text-xs text-muted-foreground">
+            * Estimates based on current Synapse storage rates and your lockup allowance
+          </div>
+        </div>
+      )}
+
+      {/* Synapse Balance and Storage Info Panel */}
+      {isConnected && (
+        <div className="mt-6 bg-background border border-border rounded-xl p-4 text-left">
+          <h4 className="font-semibold mb-2 text-foreground">
+            Synapse Storage Status
+          </h4>
+          <div className="text-sm text-foreground">
+            <div>
+              <span className="font-medium">Contract Balance:</span>{" "}
+              {balances.warmStorageBalanceFormatted} USDFC
+            </div>
+            <div>
+              <span className="font-medium">Storage Usage:</span>{" "}
+              {balances.currentStorageGB.toFixed(2)} GB
+            </div>
+            <div>
+              <span className="font-medium">Persistence:</span>{" "}
+              {balances.persistenceDaysLeft < 0.01 
+                ? `${(balances.persistenceDaysLeft * 24 * 60).toFixed(1)} minutes`
+                : balances.persistenceDaysLeft < 1 
+                ? `${(balances.persistenceDaysLeft * 24).toFixed(1)} hours`
+                : `${balances.persistenceDaysLeft.toFixed(1)} days`} remaining
+            </div>
           </div>
         </div>
       )}
