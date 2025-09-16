@@ -13,6 +13,7 @@ import { RainbowKitProvider } from "@rainbow-me/rainbowkit";
 import "@rainbow-me/rainbowkit/styles.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { SynapseProvider } from "@/providers/SynapseProvider";
+import { ConfettiProvider } from "@/providers/ConfettiProvider";
 import { rpcConfig } from "@/config";
 
 const queryClient = new QueryClient();
@@ -40,7 +41,8 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <QueryClientProvider client={queryClient}>
+          <ConfettiProvider>
+            <QueryClientProvider client={queryClient}>
             <WagmiProvider config={config}>
               <RainbowKitProvider
                 modalSize="compact"
@@ -51,7 +53,8 @@ export default function RootLayout({
                 </SynapseProvider>
               </RainbowKitProvider>
             </WagmiProvider>
-          </QueryClientProvider>
+            </QueryClientProvider>
+          </ConfettiProvider>
         </ThemeProvider>
         <Analytics />
       </body>

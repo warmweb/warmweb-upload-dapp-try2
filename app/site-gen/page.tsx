@@ -500,7 +500,7 @@ export default function SiteGenPage() {
           {/* Header */}
           <motion.div variants={fadeInUp} className="text-center mb-8">
             <div className="flex items-center justify-center gap-4 mb-4">
-              <Link href="/app" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
+              <Link href="/" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
                 <ArrowLeft className="w-5 h-5" />
                 Back to Dashboard
               </Link>
