@@ -1,7 +1,7 @@
 "use client";
 import { StorageManager } from "@/components/StorageManager";
 import { useAccount } from "wagmi";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { FileUploader } from "../../components/FileUploader";
 import { motion, AnimatePresence } from "framer-motion";
 import Confetti from "@/components/ui/Confetti";
@@ -38,7 +38,7 @@ const itemVariants = {
   },
 };
 
-export default function AppPage() {
+function AppPageContent() {
   const { isConnected, chainId } = useAccount();
   const [activeTab, setActiveTab] = useState<Tab>("manage-storage");
   const router = useRouter();
@@ -305,5 +305,18 @@ export default function AppPage() {
         </motion.div>
       </motion.main>
     </div>
+  );
+}
+
+export default function AppPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/5 flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    </div>}>
+      <AppPageContent />
+    </Suspense>
   );
 }
