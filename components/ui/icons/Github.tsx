@@ -1,4 +1,8 @@
-function Github() {
+interface GithubProps {
+  className?: string;
+}
+
+function Github({ className }: GithubProps) {
   return (
     <svg
       width="25"
@@ -6,6 +10,7 @@ function Github() {
       viewBox="0 0 20 21"
       fill="currentColor"
       xmlns="http://www.w3.org/2000/svg"
+      className={className}
     >
       <path
         fillRule="evenodd"

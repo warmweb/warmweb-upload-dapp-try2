@@ -8,21 +8,6 @@ import { useSiteZip } from "@/hooks/useSiteZip";
 import { useSynapseClient } from "@/hooks/useSynapseClient";
 import { useBalances } from "@/hooks/useBalances";
 import { TIME_CONSTANTS } from "@filoz/synapse-sdk";
-import { ArrowLeft, Download, Upload, Globe, Loader2, CheckCircle, XCircle, AlertCircle } from "lucide-react";
-import Link from "next/link";
-
-const fadeInUp = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5 } }
-};
-
-const stagger = {
-  visible: {
-    transition: {
-      staggerChildren: 0.1
-    }
-  }
-};
 
 export default function SiteGenPage() {
   const [prompt, setPrompt] = useState("");
@@ -489,145 +474,85 @@ export default function SiteGenPage() {
                          checklistStatus.warmStorageApproved;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/5">
-      <div className="container mx-auto p-6 max-w-7xl">
-        <motion.div
-          initial="hidden"
-          animate="visible"
-          variants={stagger}
-          className="space-y-8"
-        >
-          {/* Header */}
-          <motion.div variants={fadeInUp} className="text-center mb-8">
-            <div className="flex items-center justify-center gap-4 mb-4">
-              <Link href="/app" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
-                <ArrowLeft className="w-5 h-5" />
-                Back to Dashboard
-              </Link>
-            </div>
-            <div className="flex items-center justify-center gap-4 mb-6">
-              <Globe className="w-12 h-12 text-primary" />
-              <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-                Site Generator
-              </h1>
-            </div>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Create professional websites with AI and deploy them to the decentralized web
+    <div className="container mx-auto p-6 max-w-6xl">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="space-y-6"
+      >
+        <div className="text-center">
+          <h1 className="text-3xl font-bold mb-2">🌐 Site Generator</h1>
+          <p className="text-gray-600">
+            Generate static websites and store them on Filecoin
+          </p>
+        </div>
+
+        {!isConnected && (
+          <div className="text-center py-8">
+            <ConnectButton />
+            <p className="mt-3 text-gray-500">
+              Please connect your wallet to use the Site Generator
             </p>
-          </motion.div>
+          </div>
+        )}
 
-          {!isConnected && (
-            <motion.div variants={fadeInUp} className="text-center py-12">
-              <div className="bg-card rounded-2xl p-8 shadow-lg border max-w-md mx-auto">
-                <Globe className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                <h2 className="text-2xl font-semibold mb-4">Connect Your Wallet</h2>
-                <p className="text-muted-foreground mb-6">
-                  Connect your Web3 wallet to start creating and deploying websites
-                </p>
-                <ConnectButton />
+        {isConnected && (
+          <>
+            {/* Status Panel */}
+            <div className="bg-gray-50 border rounded-lg p-4 mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-semibold">📊 Status</h3>
+                <button
+                  onClick={async () => {
+                    setIsLoadingBalances(true);
+                    try {
+                      const balanceData = await getBalances();
+                      setBalances(balanceData);
+                      await checkUploadRequirements();
+                    } catch (error) {
+                      console.error("Failed to refresh balances:", error);
+                    } finally {
+                      setIsLoadingBalances(false);
+                    }
+                  }}
+                  disabled={isLoadingBalances}
+                  className={`px-3 py-1 text-xs rounded-lg font-medium transition-all ${
+                    isLoadingBalances
+                      ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                      : "bg-blue-500 text-white hover:bg-blue-600"
+                  }`}
+                  title="Refresh balances and status"
+                >
+                  {isLoadingBalances ? "🔄 Refreshing..." : "🔄 Refresh"}
+                </button>
               </div>
-            </motion.div>
-          )}
-
-          {isConnected && (
-            <>
-              {/* Status Panel */}
-              <motion.div variants={fadeInUp} className="bg-card/50 backdrop-blur-sm border rounded-2xl p-6 shadow-lg mb-8">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-                      <CheckCircle className="w-5 h-5 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-semibold">Account Status</h3>
-                      <p className="text-sm text-muted-foreground">Monitor your wallet and storage metrics</p>
-                    </div>
-                  </div>
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={async () => {
-                      setIsLoadingBalances(true);
-                      try {
-                        const balanceData = await getBalances();
-                        setBalances(balanceData);
-                        await checkUploadRequirements();
-                      } catch (error) {
-                        console.error("Failed to refresh balances:", error);
-                      } finally {
-                        setIsLoadingBalances(false);
-                      }
-                    }}
-                    disabled={isLoadingBalances}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-all"
-                  >
-                    {isLoadingBalances ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <CheckCircle className="w-4 h-4" />
-                    )}
-                    {isLoadingBalances ? "Refreshing..." : "Refresh"}
-                  </motion.button>
+              <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded text-sm">
+                <span className="font-medium">Network:</span> {isCalibration ? "🧪 Filecoin Calibration (Testnet)" : "🌐 Filecoin Mainnet"}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div>
+                  <span className="font-medium text-gray-600">Address:</span>
+                  <p className="font-mono text-xs break-all">{address}</p>
                 </div>
-                {/* Network Status */}
-                <div className="mb-6 p-4 bg-secondary/30 border rounded-xl">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-3 h-3 rounded-full ${isCalibration ? 'bg-yellow-500' : 'bg-green-500'}`}></div>
-                    <span className="font-medium">Network:</span>
-                    <span className="text-muted-foreground">
-                      {isCalibration ? "Filecoin Calibration (Testnet)" : "Filecoin Mainnet"}
-                    </span>
-                  </div>
+                <div>
+                  <span className="font-medium text-gray-600">USDFC Balance:</span>
+                  <p className={`font-medium ${
+                    isLoadingBalances 
+                      ? "text-gray-400" 
+                      : parseFloat(balances.usdfc) >= 5 
+                        ? "text-green-600" 
+                        : "text-red-600"
+                  }`}>
+                    {isLoadingBalances ? "Loading..." : `${parseFloat(balances.usdfc).toFixed(2)} USDFC`}
+                  </p>
                 </div>
-
-                {/* Balance Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                  <div className="bg-muted/50 rounded-xl p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-8 h-8 bg-muted rounded-lg flex items-center justify-center">
-                        <span className="text-xs font-mono">0x</span>
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-sm">Wallet Address</h4>
-                        <p className="font-mono text-xs text-muted-foreground truncate max-w-[200px]">{address}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-muted/50 rounded-xl p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-8 h-8 bg-yellow-100 rounded-lg flex items-center justify-center">
-                        <span className="text-xs font-bold text-yellow-700">$</span>
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-sm">USDFC Balance</h4>
-                        <p className={`font-bold ${
-                          isLoadingBalances 
-                            ? "text-muted-foreground" 
-                            : parseFloat(balances.usdfc) >= 5 
-                              ? "text-green-600" 
-                              : "text-red-600"
-                        }`}>
-                          {isLoadingBalances ? "Loading..." : `${parseFloat(balances.usdfc).toFixed(2)} USDFC`}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-muted/50 rounded-xl p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <span className="text-xs font-bold text-blue-700">F</span>
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-sm">{filTokenName} Balance</h4>
-                        <p className="font-bold text-foreground">
-                          {isLoadingBalances ? "Loading..." : `${parseFloat(balances.fil).toFixed(4)} ${filTokenName}`}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+                <div>
+                  <span className="font-medium text-gray-600">{filTokenName} Balance:</span>
+                  <p className="font-medium text-gray-700">
+                    {isLoadingBalances ? "Loading..." : `${parseFloat(balances.fil).toFixed(4)} ${filTokenName}`}
+                  </p>
                 </div>
+              </div>
               
               {/* Synapse Storage Metrics */}
               <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -730,296 +655,153 @@ export default function SiteGenPage() {
                   )}
                 </div>
               )}
-              </motion.div>
-              
-              {/* Main Content Area */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Left Panel - Website Builder */}
-                <motion.div variants={fadeInUp} className="bg-card rounded-2xl p-6 shadow-lg border">
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-                      <Globe className="w-5 h-5 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-semibold">Website Builder</h3>
-                      <p className="text-sm text-muted-foreground">Describe your website and we&apos;ll generate it</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <label htmlFor="prompt" className="block text-sm font-semibold mb-3">
-                        Website Description
-                      </label>
-                      <textarea
-                        id="prompt"
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        placeholder="Describe your website content here... Be specific about the design, content, and functionality you want."
-                        className="w-full h-32 p-4 border rounded-xl resize-none focus:ring-2 focus:ring-primary focus:border-transparent bg-background"
-                        disabled={isUploading}
-                      />
-                    </div>
-
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={handleBuildPreview}
-                      disabled={!prompt.trim() || isUploading}
-                      className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-xl font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                    >
-                      {isUploading ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                      ) : (
-                        <Globe className="w-5 h-5" />
-                      )}
-                      {isUploading ? "Generating..." : "Generate Website"}
-                    </motion.button>
-                  </div>
-
-                  {/* Upload Checklist */}
-                  {htmlContent && (
-                    <div className="mt-6 p-4 bg-secondary/30 border rounded-xl">
-                      <div className="flex items-center gap-2 mb-4">
-                        <CheckCircle className="w-5 h-5 text-primary" />
-                        <h4 className="font-semibold">Upload Requirements</h4>
-                      </div>
-                      <div className="space-y-3">
-                        {/* Wallet Connected */}
-                        <div className="flex items-center justify-between p-3 bg-background rounded-lg border">
-                          <div className="flex items-center gap-3">
-                            {checklistStatus.walletConnected ? (
-                              <CheckCircle className="w-5 h-5 text-green-500" />
-                            ) : (
-                              <XCircle className="w-5 h-5 text-red-500" />
-                            )}
-                            <span className="text-sm font-medium">Wallet Connected</span>
-                          </div>
-                          {!checklistStatus.walletConnected && (
-                            <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full">
-                              Required
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Network Check */}
-                        <div className="flex items-center justify-between p-3 bg-background rounded-lg border">
-                          <div className="flex items-center gap-3">
-                            {checklistStatus.onCalibration ? (
-                              <CheckCircle className="w-5 h-5 text-green-500" />
-                            ) : (
-                              <XCircle className="w-5 h-5 text-red-500" />
-                            )}
-                            <span className="text-sm font-medium">Filecoin Calibration Network</span>
-                          </div>
-                          {!checklistStatus.onCalibration && isConnected && (
-                            <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full">
-                              Switch Network
-                            </span>
-                          )}
-                        </div>
-
-                        {/* FIL Balance */}
-                        <div className="flex items-center justify-between p-3 bg-background rounded-lg border">
-                          <div className="flex items-center gap-3">
-                            {checklistStatus.hasEnoughFil ? (
-                              <CheckCircle className="w-5 h-5 text-green-500" />
-                            ) : (
-                              <XCircle className="w-5 h-5 text-red-500" />
-                            )}
-                            <span className="text-sm font-medium">{filTokenName} for Gas (≥0.1)</span>
-                          </div>
-                          {!checklistStatus.hasEnoughFil && isConnected && (
-                            <a 
-                              href={filFaucetUrl} 
-                              target="_blank" 
-                              className="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full hover:bg-blue-200 transition-colors"
-                            >
-                              Get {filTokenName}
-                            </a>
-                          )}
-                        </div>
-
-                        {/* USDFC Deposit */}
-                        <div className="flex items-center justify-between p-3 bg-background rounded-lg border">
-                          <div className="flex items-center gap-3">
-                            {checklistStatus.hasEnoughUsdfc ? (
-                              <CheckCircle className="w-5 h-5 text-green-500" />
-                            ) : (
-                              <XCircle className="w-5 h-5 text-red-500" />
-                            )}
-                            <span className="text-sm font-medium">USDFC Deposited (≥5)</span>
-                          </div>
-                          {!checklistStatus.hasEnoughUsdfc && isConnected && (
-                            <motion.button
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
-                              onClick={handleFixUSDFC}
-                              disabled={isFixing === "usdfc"}
-                              className="text-xs bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full hover:bg-yellow-200 disabled:opacity-50 transition-colors"
-                            >
-                              {isFixing === "usdfc" ? (
-                                <div className="flex items-center gap-1">
-                                  <Loader2 className="w-3 h-3 animate-spin" />
-                                  Depositing...
-                                </div>
-                              ) : (
-                                "Deposit USDFC"
-                              )}
-                            </motion.button>
-                          )}
-                        </div>
-
-                        {/* Warm Storage Approval */}
-                        <div className="flex items-center justify-between p-3 bg-background rounded-lg border">
-                          <div className="flex items-center gap-3">
-                            {checklistStatus.warmStorageApproved ? (
-                              <CheckCircle className="w-5 h-5 text-green-500" />
-                            ) : (
-                              <XCircle className="w-5 h-5 text-red-500" />
-                            )}
-                            <span className="text-sm font-medium">Warm Storage Approved</span>
-                          </div>
-                          {!checklistStatus.warmStorageApproved && isConnected && (
-                            <motion.button
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
-                              onClick={handleFixWarmStorage}
-                              disabled={isFixing === "warmstorage"}
-                              className="text-xs bg-orange-100 text-orange-700 px-3 py-1 rounded-full hover:bg-orange-200 disabled:opacity-50 transition-colors"
-                            >
-                              {isFixing === "warmstorage" ? (
-                                <div className="flex items-center gap-1">
-                                  <Loader2 className="w-3 h-3 animate-spin" />
-                                  Approving...
-                                </div>
-                              ) : (
-                                "Approve Storage"
-                              )}
-                            </motion.button>
-                          )}
-                        </div>
-
-                        {/* Ready Status */}
-                        <div className={`p-3 rounded-lg border-2 ${
-                          isReadyToUpload 
-                            ? "bg-green-50 border-green-200" 
-                            : "bg-yellow-50 border-yellow-200"
-                        }`}>
-                          <div className="flex items-center gap-3">
-                            {isReadyToUpload ? (
-                              <CheckCircle className="w-5 h-5 text-green-500" />
-                            ) : (
-                              <AlertCircle className="w-5 h-5 text-yellow-500" />
-                            )}
-                            <span className={`text-sm font-semibold ${
-                              isReadyToUpload ? "text-green-700" : "text-yellow-700"
-                            }`}>
-                              {isReadyToUpload ? "Ready to Deploy!" : "Setup Required"}
-                              {isCheckingStatus && " (checking...)"}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </motion.div>
-
-                {/* Right Panel - Preview */}
-                <motion.div variants={fadeInUp} className="bg-card rounded-2xl p-6 shadow-lg border">
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-                      <Globe className="w-5 h-5 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-semibold">Live Preview</h3>
-                      <p className="text-sm text-muted-foreground">See your website as it will appear</p>
-                    </div>
-                  </div>
-                  
-                  <div className="border rounded-xl overflow-hidden h-96 bg-muted/20">
-                    {htmlContent ? (
-                      <iframe
-                        srcDoc={htmlContent}
-                        className="w-full h-full"
-                        title="Site Preview"
-                        sandbox="allow-same-origin"
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                        <Globe className="w-16 h-16 mb-4 opacity-50" />
-                        <p className="text-lg font-medium">No Preview Yet</p>
-                        <p className="text-sm">Generate your website to see a preview</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Deployment Actions */}
-                  {htmlContent && (
-                    <div className="mt-6 space-y-4">
-                      <div className="flex gap-3">
-                        <motion.button
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={handleStoreWithSynapse}
-                          disabled={!htmlContent || isUploading || !!uploadedPieceCid || !isReadyToUpload}
-                          className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                        >
-                          {isUploading ? (
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                          ) : uploadedPieceCid ? (
-                            <CheckCircle className="w-5 h-5" />
-                          ) : (
-                            <Upload className="w-5 h-5" />
-                          )}
-                          {isUploading ? "Deploying..." : uploadedPieceCid ? "Deployed!" : "Deploy to Filecoin"}
-                        </motion.button>
-                        
-                        <motion.button
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={handleDownloadZip}
-                          disabled={!htmlContent || isUploading}
-                          className="flex items-center justify-center gap-2 px-4 py-3 bg-secondary text-secondary-foreground rounded-xl font-semibold hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                        >
-                          <Download className="w-5 h-5" />
-                          ZIP
-                        </motion.button>
-                      </div>
-
-                      {uploadedPieceCid && (
-                        <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
-                          <div className="flex items-center gap-2 mb-2">
-                            <CheckCircle className="w-5 h-5 text-green-600" />
-                            <h4 className="font-semibold text-green-800">Successfully Deployed!</h4>
-                          </div>
-                          <div className="text-sm text-green-700 space-y-1">
-                            <div><span className="font-medium">Files:</span> {fileList.join(", ")}</div>
-                            <div><span className="font-medium">Size:</span> {zipSize.toLocaleString()} bytes</div>
-                            <div className="break-all"><span className="font-medium">Piece CID:</span> {uploadedPieceCid}</div>
-                          </div>
-                        </div>
-                      )}
-
-                      {uploadStatus && (
-                        <div className="p-3 rounded-lg bg-muted/50">
-                          <p className={`text-sm ${
-                            uploadStatus.includes("❌") ? "text-red-500" :
-                            uploadStatus.includes("✅") || uploadStatus.includes("🎉") ? "text-green-500" :
-                            "text-muted-foreground"
-                          }`}>
-                            {uploadStatus}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </motion.div>
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Left Panel - Controls */}
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="prompt" className="block text-sm font-medium mb-2">
+                  Prompt
+                </label>
+                <textarea
+                  id="prompt"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="Describe your website content here..."
+                  className="w-full h-32 p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={isUploading}
+                />
               </div>
 
-              {/* Simple Deposit Section - moved outside grid */}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleBuildPreview}
+                  disabled={!prompt.trim() || isUploading}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                    !prompt.trim() || isUploading
+                      ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                      : "bg-blue-500 text-white hover:bg-blue-600"
+                  }`}
+                >
+                  Build Preview
+                </button>
+              </div>
+
+              {/* Upload Checklist */}
+              {htmlContent && (
+                <div className="mt-6 border rounded-lg p-4 bg-gray-50">
+                  <h4 className="font-semibold mb-3 text-gray-800">📋 Upload Requirements</h4>
+                  <div className="space-y-2">
+                    {/* Wallet Connected */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={checklistStatus.walletConnected ? "text-green-600" : "text-red-600"}>
+                          {checklistStatus.walletConnected ? "✅" : "❌"}
+                        </span>
+                        <span className="text-sm">Wallet connected (Calibration)</span>
+                      </div>
+                      {!checklistStatus.walletConnected && (
+                        <div className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">
+                          Connect to Calibration testnet
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Network Check */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={checklistStatus.onCalibration ? "text-green-600" : "text-red-600"}>
+                          {checklistStatus.onCalibration ? "✅" : "❌"}
+                        </span>
+                        <span className="text-sm">On Filecoin Calibration</span>
+                      </div>
+                      {!checklistStatus.onCalibration && isConnected && (
+                        <div className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">
+                          Switch to Calibration network
+                        </div>
+                      )}
+                    </div>
+
+                    {/* FIL Balance */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={checklistStatus.hasEnoughFil ? "text-green-600" : "text-red-600"}>
+                          {checklistStatus.hasEnoughFil ? "✅" : "❌"}
+                        </span>
+                        <span className="text-sm">{filTokenName} for fees present (≥0.1)</span>
+                      </div>
+                      {!checklistStatus.hasEnoughFil && isConnected && (
+                        <a 
+                          href={filFaucetUrl} 
+                          target="_blank" 
+                          className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded hover:bg-blue-200"
+                        >
+                          Get {filTokenName}
+                        </a>
+                      )}
+                    </div>
+
+                    {/* USDFC Deposit */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={checklistStatus.hasEnoughUsdfc ? "text-green-600" : "text-red-600"}>
+                          {checklistStatus.hasEnoughUsdfc ? "✅" : "❌"}
+                        </span>
+                        <span className="text-sm">USDFC ≥5 deposited</span>
+                      </div>
+                      {!checklistStatus.hasEnoughUsdfc && isConnected && (
+                        <button
+                          onClick={handleFixUSDFC}
+                          disabled={isFixing === "usdfc"}
+                          className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded hover:bg-yellow-200 disabled:opacity-50"
+                        >
+                          {isFixing === "usdfc" ? "Depositing..." : "Deposit USDFC"}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Warm Storage Approval */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={checklistStatus.warmStorageApproved ? "text-green-600" : "text-red-600"}>
+                          {checklistStatus.warmStorageApproved ? "✅" : "❌"}
+                        </span>
+                        <span className="text-sm">Warm Storage approved</span>
+                      </div>
+                      {!checklistStatus.warmStorageApproved && isConnected && (
+                        <button
+                          onClick={handleFixWarmStorage}
+                          disabled={isFixing === "warmstorage"}
+                          className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded hover:bg-orange-200 disabled:opacity-50"
+                        >
+                          {isFixing === "warmstorage" ? "Approving..." : "Approve Warm Storage"}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Ready Status */}
+                    <div className="flex items-center justify-between pt-2 border-t">
+                      <div className="flex items-center gap-2">
+                        <span className={isReadyToUpload ? "text-green-600" : "text-yellow-600"}>
+                          {isReadyToUpload ? "✅" : "⏳"}
+                        </span>
+                        <span className="text-sm font-medium">Ready to upload</span>
+                        {isCheckingStatus && <span className="text-xs text-gray-500">(checking...)</span>}
+                      </div>
+                      {isReadyToUpload && (
+                        <div className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                          All requirements met!
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Simple Deposit Section */}
               {htmlContent && !uploadedPieceCid && parseFloat(balances.usdfc) < 10 && (
-                <motion.div variants={fadeInUp} className="mt-8 p-6 bg-card rounded-2xl border shadow-lg">
+                <div className="mt-6 border rounded-lg p-4 bg-blue-50 border-blue-200">
                   <h4 className="font-semibold mb-3 text-blue-800">💰 Add Storage Balance</h4>
                   <div className="text-sm text-blue-700 mb-3">
                     Deposit USDFC to extend your storage persistence
@@ -1029,24 +811,235 @@ export default function SiteGenPage() {
                       <span className="text-blue-700">Current Balance:</span>
                       <span className="ml-2 font-medium text-blue-900">{parseFloat(balances.usdfc).toFixed(2)} USDFC</span>
                     </div>
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
+                    <button
                       onClick={handleSimpleDeposit}
                       disabled={isUploading || durationAction?.type === 'deposit'}
-                      className="px-4 py-2 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                        isUploading || durationAction?.type === 'deposit'
+                          ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                          : "bg-blue-500 text-white hover:bg-blue-600"
+                      }`}
                     >
                       {durationAction?.type === 'deposit'
                         ? "Depositing..."
                         : "Deposit 10 USDFC"}
-                    </motion.button>
+                    </button>
                   </div>
-                </motion.div>
+                </div>
               )}
-            </>
-          )}
-        </motion.div>
-      </div>
+
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={handleStoreWithSynapse}
+                  disabled={!htmlContent || isUploading || !!uploadedPieceCid || !isReadyToUpload}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                    !htmlContent || isUploading || uploadedPieceCid || !isReadyToUpload
+                      ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                      : "bg-green-500 text-white hover:bg-green-600"
+                  }`}
+                  title={!isReadyToUpload ? "Complete all requirements above first" : ""}
+                >
+                  {isUploading ? "Storing..." : uploadedPieceCid ? "Stored!" : "Store with Synapse"}
+                </button>
+                <button
+                  onClick={handleDownloadZip}
+                  disabled={!htmlContent || isUploading}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                    !htmlContent || isUploading
+                      ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                      : "bg-purple-500 text-white hover:bg-purple-600"
+                  }`}
+                  title="Download the exact ZIP artifact that was uploaded to Filecoin"
+                >
+                  📦 Download ZIP
+                </button>
+              </div>
+
+              {zipSize > 0 && (
+                <div className="text-sm text-gray-600">
+                  ZIP size: {zipSize.toLocaleString()} bytes
+                  {fileList.length > 0 && (
+                    <div className="mt-1">
+                      Files: {fileList.join(", ")}
+                    </div>
+                  )}
+                  <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded text-purple-700 text-xs">
+                    💡 <strong>Artifact Transparency:</strong> The &quot;Download ZIP&quot; button gives you the exact same file structure that was uploaded to Filecoin, ensuring full transparency of the stored artifact.
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={handleResetAll}
+                disabled={isUploading}
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                  isUploading
+                    ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                    : "bg-gray-500 text-white hover:bg-gray-600"
+                }`}
+              >
+                Reset
+              </button>
+
+              {uploadStatus && (
+                <div className="mt-4">
+                  <p
+                    className={`text-sm ${
+                      uploadStatus.includes("❌")
+                        ? "text-red-500"
+                        : uploadStatus.includes("✅") || uploadStatus.includes("🎉")
+                        ? "text-green-500"
+                        : "text-gray-600"
+                    }`}
+                  >
+                    {uploadStatus}
+                  </p>
+                  {isUploading && (
+                    <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+                      <div className="bg-blue-500 h-2.5 rounded-full animate-pulse"></div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {uploadedPieceCid && !isUploading && (
+                <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h4 className="font-semibold mb-2 text-green-800">
+                    🎉 Stored on Filecoin Onchain Cloud!
+                  </h4>
+                  <div className="text-sm text-green-700">
+                    <div>
+                      <span className="font-medium">Files:</span> {fileList.join(", ")}
+                    </div>
+                    <div>
+                      <span className="font-medium">ZIP Size:</span> {zipSize.toLocaleString()} bytes
+                    </div>
+                    <div className="break-all">
+                      <span className="font-medium">Piece CID:</span> {uploadedPieceCid}
+                    </div>
+                    <div className="mt-2 p-2 bg-blue-50 rounded text-blue-700">
+                      💡 Your static site is now permanently stored on Filecoin&apos;s decentralized network!
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Right Panel - Preview */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Preview</h3>
+              <div className="border border-gray-300 rounded-lg h-96 overflow-hidden">
+                {htmlContent ? (
+                  <iframe
+                    srcDoc={htmlContent}
+                    className="w-full h-full"
+                    title="Site Preview"
+                    sandbox="allow-same-origin"
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-gray-500">
+                    Build a preview to see your site here
+                  </div>
+                )}
+              </div>
+            </div>
+            </div>
+
+            {/* Debug Section - Development Only */}
+            {isDev && isConnected && (
+              <div className="mt-6 border border-gray-300 rounded-lg bg-gray-50">
+                <button
+                  onClick={() => setShowDebug(!showDebug)}
+                  className="w-full p-3 text-left font-medium text-gray-700 hover:bg-gray-100 flex items-center justify-between"
+                >
+                  <span>🐛 Debug Information</span>
+                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                    DEV MODE
+                  </span>
+                </button>
+                
+                {showDebug && debugInfo && (
+                  <div className="p-4 border-t border-gray-200 bg-white text-xs font-mono">
+                    <div className="space-y-3">
+                      {/* Network Info */}
+                      <div>
+                        <h5 className="font-semibold text-blue-600 mb-1">Network</h5>
+                        <div className="bg-blue-50 p-2 rounded text-blue-800">
+                          <div>Chain ID: {debugInfo.network.chainId}</div>
+                          <div>Name: {debugInfo.network.name}</div>
+                          <div>Is Calibration: {debugInfo.network.isCalibration ? "Yes" : "No"}</div>
+                        </div>
+                      </div>
+
+                      {/* Signer Info */}
+                      <div>
+                        <h5 className="font-semibold text-green-600 mb-1">Signer</h5>
+                        <div className="bg-green-50 p-2 rounded text-green-800">
+                          <div>Address: {debugInfo.signer.address}</div>
+                          <div>Connected: {debugInfo.signer.connected ? "Yes" : "No"}</div>
+                        </div>
+                      </div>
+
+                      {/* Balances */}
+                      <div>
+                        <h5 className="font-semibold text-purple-600 mb-1">Balances</h5>
+                        <div className="bg-purple-50 p-2 rounded text-purple-800">
+                          <div><strong>Wallet:</strong></div>
+                          <div className="ml-2">
+                            <div>{filTokenName}: {debugInfo.balances.wallet.fil}</div>
+                            <div>USDFC: {debugInfo.balances.wallet.usdfc}</div>
+                          </div>
+                          <div className="mt-1"><strong>Synapse:</strong></div>
+                          <div className="ml-2">
+                            <div>USDFC Deposit: {debugInfo.balances.synapse.usdfc}</div>
+                            <div>Sufficient: {debugInfo.balances.synapse.hasEnoughDeposit ? "Yes" : "No"}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Allowances */}
+                      <div>
+                        <h5 className="font-semibold text-orange-600 mb-1">Allowances</h5>
+                        <div className="bg-orange-50 p-2 rounded text-orange-800">
+                          <div>Rate Allowance: {debugInfo.allowances.warmStorage.rateAllowance} USDFC</div>
+                          <div>Lockup Allowance: {debugInfo.allowances.warmStorage.lockupAllowance} USDFC</div>
+                          <div>Has Rate: {debugInfo.allowances.warmStorage.hasRateAllowance ? "Yes" : "No"}</div>
+                          <div>Has Lockup: {debugInfo.allowances.warmStorage.hasLockupAllowance ? "Yes" : "No"}</div>
+                          <div>Fully Approved: {debugInfo.allowances.approved ? "Yes" : "No"}</div>
+                        </div>
+                      </div>
+
+                      {/* Upload Info */}
+                      <div>
+                        <h5 className="font-semibold text-red-600 mb-1">Upload</h5>
+                        <div className="bg-red-50 p-2 rounded text-red-800">
+                          <div>Last Payload Size: {debugInfo.upload.lastPayloadSize.toLocaleString()} bytes</div>
+                          <div>Last Upload: {debugInfo.upload.lastUploadTime || "None"}</div>
+                          {uploadedPieceCid && (
+                            <div className="mt-1">
+                              <div>Last Piece CID: {uploadedPieceCid}</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Raw Debug Object */}
+                      <details className="mt-3">
+                        <summary className="cursor-pointer font-semibold text-gray-600 hover:text-gray-800">
+                          Raw Debug Object
+                        </summary>
+                        <pre className="mt-2 p-2 bg-gray-100 text-gray-800 text-xs overflow-auto max-h-40">
+                          {JSON.stringify(debugInfo, null, 2)}
+                        </pre>
+                      </details>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </motion.div>
     </div>
   );
 }
