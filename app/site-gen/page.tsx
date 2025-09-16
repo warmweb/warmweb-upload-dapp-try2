@@ -429,7 +429,7 @@ export default function SiteGenPage() {
       setBalances(updatedBalances);
     } catch (error) {
       console.error('Deposit failed:', error);
-      setUploadStatus(`❌ Deposit failed: ${error.message}`);
+      setUploadStatus(`❌ Deposit failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setDurationAction(null);
     }
