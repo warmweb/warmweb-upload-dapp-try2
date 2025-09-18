@@ -138,7 +138,25 @@ export const useSiteUpload = () => {
     },
     onError: (error) => {
       console.error("Site upload failed:", error);
-      setStatus(`❌ Upload failed: ${error.message || "Please try again"}`);
+      
+      // Provide helpful error messages
+      let errorMessage = "❌ Upload failed: ";
+      
+      if (error.message.includes("Gas estimation failed") || (error.message.includes("insufficient") && error.message.includes("tFIL"))) {
+        errorMessage += "Not enough tFIL tokens for gas fees. You need at least 0.1 tFIL to pay for transactions. Get test tFIL from the Calibration faucet: https://faucet.calibnet.chainsafe-fil.io/funds.html";
+      } else if (error.message.includes("Insufficient USDFC")) {
+        errorMessage += "Not enough USDFC tokens. Get test USDFC from the Calibration faucet: https://forest-explorer.chainsafe.dev/faucet/calibnet_usdfc";
+      } else if (error.message.includes("allowance") || error.message.includes("insufficient")) {
+        errorMessage += "Storage allowances couldn't be set. This usually means you need to approve transactions in your wallet, or you don't have enough USDFC balance. Please check your wallet and try again.";
+      } else if (error.message.includes("connect")) {
+        errorMessage += "Please connect your wallet first.";
+      } else if (error.message.includes("rejected") || error.message.includes("denied")) {
+        errorMessage += "Transaction was rejected in wallet. Please try again and approve the required transactions.";
+      } else {
+        errorMessage += error.message || "Please try again.";
+      }
+      
+      setStatus(errorMessage);
       setProgress(0);
     },
   });

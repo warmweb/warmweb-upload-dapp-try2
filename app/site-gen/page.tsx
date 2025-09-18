@@ -7,7 +7,7 @@ import JSZip from "jszip";
 import { useSiteZip } from "@/hooks/useSiteZip";
 import { useSynapseClient } from "@/hooks/useSynapseClient";
 import { useBalances } from "@/hooks/useBalances";
-import { TIME_CONSTANTS } from "@filoz/synapse-sdk";
+import { usePublishSite } from "@/hooks/usePublishSite";
 import { ArrowLeft, Download, Upload, Globe, Loader2, CheckCircle, XCircle, AlertCircle } from "lucide-react";
 import Link from "next/link";
 
@@ -46,6 +46,7 @@ export default function SiteGenPage() {
   const [lastUploadSize, setLastUploadSize] = useState<number>(0);
   const [showDebug, setShowDebug] = useState(false);
   const [durationAction, setDurationAction] = useState<{ type: 'deposit' | 'store', days: number } | null>(null);
+  const [uploadResult, setUploadResult] = useState<any>(null);
   const { isConnected, address, chainId } = useAccount();
 
   // Check if we're in development mode
@@ -63,6 +64,13 @@ export default function SiteGenPage() {
   } = useSynapseClient();
 
   const { data: synapseBalances } = useBalances();
+  const {
+    publishSite,
+    isPublishing,
+    publishError,
+    publishedSite,
+    resetPublishedSite
+  } = usePublishSite();
 
   // Network-specific token names and faucets
   const isCalibration = chainId === 314159;
@@ -330,6 +338,7 @@ export default function SiteGenPage() {
       
       // Step 5: Success!
       setUploadedPieceCid(result.pieceCid);
+      setUploadResult(result);
       setUploadStatus("🎉 Successfully stored on Filecoin Onchain Cloud!");
       
       // Telemetry logging
@@ -355,7 +364,9 @@ export default function SiteGenPage() {
       // Provide helpful error messages
       let errorMessage = "❌ Upload failed: ";
       
-      if (error.message.includes("Insufficient USDFC")) {
+      if (error.message.includes("Gas estimation failed") || error.message.includes("insufficient") && error.message.includes("tFIL")) {
+        errorMessage += "Not enough tFIL tokens for gas fees. You need at least 0.1 tFIL to pay for transactions. Get test tFIL from the Calibration faucet: https://faucet.calibnet.chainsafe-fil.io/funds.html";
+      } else if (error.message.includes("Insufficient USDFC")) {
         errorMessage += "Not enough USDFC tokens. Get test USDFC from the Calibration faucet: https://forest-explorer.chainsafe.dev/faucet/calibnet_usdfc";
       } else if (error.message.includes("allowance") || error.message.includes("insufficient")) {
         errorMessage += "Storage allowances couldn't be set. This usually means you need to approve transactions in your wallet, or you don't have enough USDFC balance. Please check your wallet and try again.";
@@ -422,12 +433,34 @@ export default function SiteGenPage() {
     }
   };
 
+  const handlePublishToWarmWeb = async () => {
+    console.log('uploadedPieceCid', uploadedPieceCid)
+    console.log('uploadResult?.datasetId', uploadResult?.datasetId)
+    if (!uploadedPieceCid || !uploadResult?.datasetId) return;
+
+    try {
+      // Generate a subdomain name if not provided
+      const subdomain = `site-${uploadedPieceCid.substring(uploadedPieceCid.length - 8)}-${Date.now().toString().slice(-4)}`.toLowerCase();
+
+      await publishSite({
+        pieceCid: uploadedPieceCid,
+        datasetId: uploadResult.datasetId,
+        subdomain: subdomain
+      });
+
+    } catch (error: any) {
+      console.error('Publish failed:', error);
+    }
+  };
+
   const handleResetAll = () => {
     setPrompt("");
     setHtmlContent("");
     setZipSize(0);
     setUploadStatus("");
     setUploadedPieceCid("");
+    setUploadResult(null);
+    resetPublishedSite();
   };
 
   // Handle simple deposit
@@ -986,6 +1019,73 @@ export default function SiteGenPage() {
                           ZIP
                         </motion.button>
                       </div>
+
+                      {/* Publish to WarmWeb Button - appears after successful deployment */}
+                      {uploadedPieceCid && !publishedSite && (
+                        <motion.button
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={handlePublishToWarmWeb}
+                          disabled={isPublishing}
+                          className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.3 }}
+                        >
+                          {isPublishing ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <Globe className="w-5 h-5" />
+                          )}
+                          {isPublishing ? "Publishing..." : "Publish to WarmWeb"}
+                        </motion.button>
+                      )}
+
+                      {/* Published URL Display */}
+                      {publishedSite && (
+                        <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                          <div className="flex items-center gap-2 mb-2">
+                            <CheckCircle className="w-5 h-5 text-blue-600" />
+                            <h4 className="font-semibold text-blue-800">Published to WarmWeb!</h4>
+                          </div>
+                          <div className="text-sm text-blue-700 space-y-1">
+                            <div>
+                              <span className="font-medium">Live URL:</span>
+                              <a
+                                href={publishedSite.accessUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="ml-2 text-blue-600 hover:text-blue-800 underline"
+                              >
+                                {publishedSite.accessUrl}
+                              </a>
+                            </div>
+                            <div>
+                              <span className="font-medium">Production URL:</span>
+                              <a
+                                href={publishedSite.productionUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="ml-2 text-blue-600 hover:text-blue-800 underline"
+                              >
+                                {publishedSite.productionUrl}
+                              </a>
+                            </div>
+                            <div>
+                              <span className="font-medium">Subdomain:</span>
+                              <span className="ml-2 font-mono text-blue-900">{publishedSite.subdomain}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {publishError && (
+                        <div className="p-3 rounded-lg bg-red-50 border border-red-200">
+                          <p className="text-sm text-red-700">
+                            ❌ Publish failed: {publishError.message}
+                          </p>
+                        </div>
+                      )}
 
                       {uploadedPieceCid && (
                         <div className="p-4 bg-green-50 border border-green-200 rounded-xl">

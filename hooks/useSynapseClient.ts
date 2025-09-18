@@ -20,6 +20,35 @@ export function useSynapseClient() {
     : "https://faucet.filecoin.io/"; // Mainnet faucet (if available)
 
   /**
+   * Calculate estimated gas requirements for storage operations
+   */
+  const calculateGasRequirements = (fileSizeBytes: number) => {
+    // Base gas for Filecoin storage operations (empirically determined)
+    const baseGasLimit = 20000000n; // 20M gas base
+    
+    // Additional gas per MB of data
+    const fileSizeMB = Math.ceil(fileSizeBytes / (1024 * 1024));
+    const additionalGas = BigInt(fileSizeMB) * 2000000n; // 2M gas per MB
+    
+    // Total with safety margin for network congestion
+    const totalGasLimit = (baseGasLimit + additionalGas) * 150n / 100n; // 50% safety margin
+    
+    // Gas price recommendations (in attoFIL)
+    const gasPrice = isCalibration ? 1500000000n : 3000000000n; // 1.5-3 Gwei
+    
+    // Estimated cost in FIL
+    const estimatedCostWei = totalGasLimit * gasPrice;
+    const estimatedCostFil = Number(estimatedCostWei) / 1e18;
+    
+    return {
+      gasLimit: totalGasLimit,
+      gasPrice,
+      estimatedCostFil,
+      recommendedMinBalance: estimatedCostFil * 2, // Double for safety
+    };
+  };
+
+  /**
    * Get current balances for USDFC and FIL
    */
   const getBalances = async (): Promise<{ usdfc: string; fil: string }> => {
@@ -141,21 +170,37 @@ export function useSynapseClient() {
   };
 
   /**
-   * Upload bytes to Warm Storage and return PieceCID
+   * Upload bytes to Warm Storage and return PieceCID with timeout and fallback handling
    */
-  const uploadBytes = async (bytes: Uint8Array): Promise<{ pieceCid: string }> => {
+  const uploadBytes = async (bytes: Uint8Array, options?: { 
+    confirmationTimeout?: number; // Timeout in milliseconds for confirmation (default: 120000 = 2 minutes)
+  }): Promise<{ pieceCid: string }> => {
     if (!synapse || !address) {
       throw new Error("Wallet not connected. Please connect your wallet to continue.");
     }
 
     try {
-      // Check FIL balance for gas fees
-      const filBalance = await synapse.payments.walletBalance();
-      const minFilNeeded = BigInt("100000000000000000"); // 0.1 FIL minimum for gas
+      // Pre-check gas requirements with detailed calculation
+      const gasReq = calculateGasRequirements(bytes.length);
+      console.log(`Gas Requirements Check:`, {
+        fileSize: bytes.length,
+        estimatedCost: gasReq.estimatedCostFil,
+        recommendedMin: gasReq.recommendedMinBalance,
+        network: isCalibration ? 'Calibration' : 'Mainnet'
+      });
       
-      if (filBalance < minFilNeeded) {
-        throw new Error(`Insufficient ${filTokenName} for gas fees. You have ${Number(filBalance) / 1e18} ${filTokenName}, but need at least 0.1 ${filTokenName}. Get test tokens from: ${filFaucetUrl}`);
+      // Check FIL balance for gas fees with dynamic requirements
+      const filBalance = await synapse.payments.walletBalance();
+      const requiredBalance = BigInt(Math.ceil(gasReq.recommendedMinBalance * 1e18));
+      
+      if (filBalance < requiredBalance) {
+        const currentFil = Number(filBalance) / 1e18;
+        throw new Error(
+          `Insufficient ${filTokenName} for estimated gas costs. Need at least ${gasReq.recommendedMinBalance.toFixed(4)} ${filTokenName} but have ${currentFil.toFixed(4)} ${filTokenName}. Get more from: ${filFaucetUrl}`
+        );
       }
+      
+      console.log(`✅ Gas check passed. Proceeding with upload...`);
 
       // Check if we have datasets
       const datasets = await synapse.storage.findDataSets(address);
@@ -188,25 +233,105 @@ export function useSynapseClient() {
         throw new Error("Insufficient allowances for upload. Please ensure deposits and allowances are set properly.");
       }
 
-      // Create storage service
-      const storageService = await synapse.createStorage();
+      // Create storage service with callbacks to capture dataset info
+      let resolvedDatasetId: string = '';
 
-      // Upload the bytes
-      const { pieceCid } = await storageService.upload(bytes, {
-        onUploadComplete: (piece) => {
-          console.log("Upload complete, piece:", piece.toV1().toString());
-        },
-        onPieceAdded: (txResponse) => {
-          console.log("Piece added to dataset, tx:", txResponse?.hash);
-        },
-        onPieceConfirmed: (pieceIds) => {
-          console.log("Pieces confirmed:", pieceIds);
+      const storageService = await synapse.createStorage({
+        callbacks: {
+          onDataSetResolved: (info) => {
+            console.log("Dataset resolved from storageService:", info);
+            // Extract datasetId from the resolved dataset info
+            resolvedDatasetId = String(info?.dataSetId || '');
+            console.log("Resolved datasetId:", resolvedDatasetId);
+          },
+          onDataSetCreationProgress: (status) => {
+            console.log("Dataset creation progress:", status);
+            if (status.serverConfirmed && status.dataSetId) {
+              resolvedDatasetId = String(status.dataSetId);
+              console.log("New dataset created with ID:", resolvedDatasetId);
+            }
+          },
         },
       });
 
-      return { pieceCid: pieceCid.toV1().toString() };
+      // Fallback to existing dataset if not resolved from callbacks
+      const currentDataset = datasets.length > 0 ? datasets[0] : null;
+      const datasetId = resolvedDatasetId || currentDataset?.pdpVerifierDataSetId || '';
+      console.log('datasetId', datasetId)
+
+      // Upload the bytes with retry logic and timeout handling
+      let uploadAttempts = 0;
+      const maxAttempts = 3;
+      const confirmationTimeout = options?.confirmationTimeout || 120000; // 2 minutes timeout for confirmation
+
+      while (uploadAttempts < maxAttempts) {
+        try {
+          const uploadPromise = new Promise<{ pieceCid: string; datasetId: string }>((resolve, reject) => {
+            let pieceCid: string | null = null;
+            let txHash: string | null = null;
+            let confirmationReceived = false;
+            
+            // Set up timeout for confirmation
+            const timeoutId = setTimeout(() => {
+              if (!confirmationReceived && pieceCid) {
+                console.warn(`⚠️ Upload confirmation timeout after ${confirmationTimeout}ms, but piece was added. Using fallback resolution.`);
+                console.log(`Piece CID: ${pieceCid}, Transaction: ${txHash || 'unknown'}`);
+                resolve({ pieceCid, datasetId: String(datasetId) });
+              } else if (!confirmationReceived) {
+                reject(new Error(`Upload confirmation timeout after ${confirmationTimeout}ms. No piece was added.`));
+              }
+            }, confirmationTimeout);
+
+            storageService.upload(bytes, {
+              onUploadComplete: (piece) => {
+                pieceCid = piece.toV1().toString();
+                console.log("Upload complete, piece:", pieceCid);
+              },
+              onPieceAdded: (txResponse) => {
+                txHash = txResponse?.hash || null;
+                console.log("Piece added to dataset, tx:", txHash);
+                // Don't resolve here - wait for confirmation or timeout
+              },
+              onPieceConfirmed: (pieceIds) => {
+                confirmationReceived = true;
+                clearTimeout(timeoutId);
+                console.log("Pieces confirmed:", pieceIds);
+                console.log("Using datasetId from storageService:", datasetId);
+
+                if (pieceCid) {
+                  resolve({ pieceCid, datasetId: String(datasetId) });
+                } else {
+                  reject(new Error("Piece confirmed but no piece CID available"));
+                }
+              },
+            }).catch((error) => {
+              clearTimeout(timeoutId);
+              reject(error);
+            });
+          });
+
+          const result = await uploadPromise;
+          console.log('result', result)
+          return result;
+          
+        } catch (retryError: any) {
+          uploadAttempts++;
+          console.log(`Upload attempt ${uploadAttempts} failed:`, retryError.message);
+          
+          if (uploadAttempts >= maxAttempts) {
+            throw retryError; // Re-throw after max attempts
+          }
+          
+          // Wait before retry (exponential backoff)
+          await new Promise(resolve => setTimeout(resolve, 2000 * uploadAttempts));
+        }
+      }
+
+      // This should never be reached, but TypeScript requires it
+      throw new Error("Upload failed after all retry attempts");
       
     } catch (error: any) {
+      console.log('error', error)
       // Enhanced error handling for common Filecoin errors
       let errorMessage = error.message || 'Unknown error';
       
@@ -218,6 +343,8 @@ export function useSynapseClient() {
         errorMessage = "Smart contract error. This might be temporary network congestion or insufficient gas. Please try again in a few moments.";
       } else if (errorMessage.includes('500')) {
         errorMessage = "Server error occurred. This is likely temporary - please try again in a few moments.";
+      } else if (errorMessage.includes('confirmation timeout')) {
+        errorMessage = "Upload confirmation timed out. The file may have been uploaded but confirmation is delayed. Please check your transaction status.";
       }
       
       throw new Error(`Failed to upload bytes: ${errorMessage}`);
@@ -380,5 +507,6 @@ export function useSynapseClient() {
     checkAllowanceStatus,
     checkWarmStorageAllowances,
     checkUSDFCDeposit,
+    calculateGasRequirements,
   };
 }

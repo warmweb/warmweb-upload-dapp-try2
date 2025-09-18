@@ -32,7 +32,16 @@ cd fs-upload-app
 npm install
 ```
 
-3. Run the development server:
+3. Configure environment variables (optional):
+```bash
+cp .env.example .env.local
+```
+Edit `.env.local` to customize the WarmWeb server URL if needed:
+```
+NEXT_PUBLIC_WARMWEB_SERVER_URL=https://warmweb.xyz
+```
+
+4. Run the development server:
 ```bash
 npm run dev
 ```
