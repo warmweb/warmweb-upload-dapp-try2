@@ -256,7 +256,8 @@ export function useSynapseClient() {
 
       // Fallback to existing dataset if not resolved from callbacks
       const currentDataset = datasets.length > 0 ? datasets[0] : null;
-      const datasetId = resolvedDatasetId || currentDataset?.clientDataSetId || '';
+      const datasetId = resolvedDatasetId || currentDataset?.pdpVerifierDataSetId || '';
+      console.log('datasetId', datasetId)
 
       // Upload the bytes with retry logic and timeout handling
       let uploadAttempts = 0;
@@ -275,7 +276,7 @@ export function useSynapseClient() {
               if (!confirmationReceived && pieceCid) {
                 console.warn(`⚠️ Upload confirmation timeout after ${confirmationTimeout}ms, but piece was added. Using fallback resolution.`);
                 console.log(`Piece CID: ${pieceCid}, Transaction: ${txHash || 'unknown'}`);
-                resolve({ pieceCid, datasetId });
+                resolve({ pieceCid, datasetId: String(datasetId) });
               } else if (!confirmationReceived) {
                 reject(new Error(`Upload confirmation timeout after ${confirmationTimeout}ms. No piece was added.`));
               }
@@ -298,7 +299,7 @@ export function useSynapseClient() {
                 console.log("Using datasetId from storageService:", datasetId);
 
                 if (pieceCid) {
-                  resolve({ pieceCid, datasetId });
+                  resolve({ pieceCid, datasetId: String(datasetId) });
                 } else {
                   reject(new Error("Piece confirmed but no piece CID available"));
                 }
@@ -310,6 +311,7 @@ export function useSynapseClient() {
           });
 
           const result = await uploadPromise;
+          console.log('result', result)
           return result;
           
         } catch (retryError: any) {
