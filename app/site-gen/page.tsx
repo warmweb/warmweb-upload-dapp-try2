@@ -7,7 +7,7 @@ import JSZip from "jszip";
 import { useSiteZip } from "@/hooks/useSiteZip";
 import { useSynapseClient } from "@/hooks/useSynapseClient";
 import { useBalances } from "@/hooks/useBalances";
-import { TIME_CONSTANTS } from "@filoz/synapse-sdk";
+import { usePublishSite } from "@/hooks/usePublishSite";
 import { ArrowLeft, Download, Upload, Globe, Loader2, CheckCircle, XCircle, AlertCircle } from "lucide-react";
 import Link from "next/link";
 
@@ -46,9 +46,7 @@ export default function SiteGenPage() {
   const [lastUploadSize, setLastUploadSize] = useState<number>(0);
   const [showDebug, setShowDebug] = useState(false);
   const [durationAction, setDurationAction] = useState<{ type: 'deposit' | 'store', days: number } | null>(null);
-  const [isPublishing, setIsPublishing] = useState(false);
-  const [publishStatus, setPublishStatus] = useState("");
-  const [publishedUrl, setPublishedUrl] = useState("");
+  const [uploadResult, setUploadResult] = useState<any>(null);
   const { isConnected, address, chainId } = useAccount();
 
   // Check if we're in development mode
@@ -66,6 +64,13 @@ export default function SiteGenPage() {
   } = useSynapseClient();
 
   const { data: synapseBalances } = useBalances();
+  const {
+    publishSite,
+    isPublishing,
+    publishError,
+    publishedSite,
+    resetPublishedSite
+  } = usePublishSite();
 
   // Network-specific token names and faucets
   const isCalibration = chainId === 314159;
@@ -333,6 +338,7 @@ export default function SiteGenPage() {
       
       // Step 5: Success!
       setUploadedPieceCid(result.pieceCid);
+      setUploadResult(result);
       setUploadStatus("🎉 Successfully stored on Filecoin Onchain Cloud!");
       
       // Telemetry logging
@@ -428,45 +434,22 @@ export default function SiteGenPage() {
   };
 
   const handlePublishToWarmWeb = async () => {
-    if (!uploadedPieceCid || !htmlContent) return;
-    
-    setIsPublishing(true);
-    setPublishStatus("🌐 Publishing to WarmWeb...");
-    
+    console.log('uploadedPieceCid', uploadedPieceCid)
+    console.log('uploadResult?.datasetId', uploadResult?.datasetId)
+    if (!uploadedPieceCid || !uploadResult?.datasetId) return;
+
     try {
-      const response = await fetch('https://warmweb.xyz/publish', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          pieceCid: uploadedPieceCid,
-          htmlContent: htmlContent,
-          prompt: prompt,
-          fileSize: zipSize,
-          timestamp: new Date().toISOString(),
-          address: address,
-        }),
+      // Generate a subdomain name if not provided
+      const subdomain = `site-${uploadedPieceCid.substring(uploadedPieceCid.length - 8)}-${Date.now().toString().slice(-4)}`.toLowerCase();
+
+      await publishSite({
+        pieceCid: uploadedPieceCid,
+        datasetId: uploadResult.datasetId,
+        subdomain: subdomain
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      
-      if (result.success && result.url) {
-        setPublishedUrl(result.url);
-        setPublishStatus("🎉 Successfully published to WarmWeb!");
-      } else {
-        throw new Error(result.error || 'Publishing failed');
-      }
-      
     } catch (error: any) {
       console.error('Publish failed:', error);
-      setPublishStatus(`❌ Publish failed: ${error.message}`);
-    } finally {
-      setIsPublishing(false);
     }
   };
 
@@ -476,8 +459,8 @@ export default function SiteGenPage() {
     setZipSize(0);
     setUploadStatus("");
     setUploadedPieceCid("");
-    setPublishStatus("");
-    setPublishedUrl("");
+    setUploadResult(null);
+    resetPublishedSite();
   };
 
   // Handle simple deposit
@@ -1038,7 +1021,7 @@ export default function SiteGenPage() {
                       </div>
 
                       {/* Publish to WarmWeb Button - appears after successful deployment */}
-                      {uploadedPieceCid && !publishedUrl && (
+                      {uploadedPieceCid && !publishedSite && (
                         <motion.button
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
@@ -1057,9 +1040,9 @@ export default function SiteGenPage() {
                           {isPublishing ? "Publishing..." : "Publish to WarmWeb"}
                         </motion.button>
                       )}
-                      
+
                       {/* Published URL Display */}
-                      {publishedUrl && (
+                      {publishedSite && (
                         <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
                           <div className="flex items-center gap-2 mb-2">
                             <CheckCircle className="w-5 h-5 text-blue-600" />
@@ -1068,27 +1051,38 @@ export default function SiteGenPage() {
                           <div className="text-sm text-blue-700 space-y-1">
                             <div>
                               <span className="font-medium">Live URL:</span>
-                              <a 
-                                href={publishedUrl} 
-                                target="_blank" 
+                              <a
+                                href={publishedSite.accessUrl}
+                                target="_blank"
                                 rel="noopener noreferrer"
                                 className="ml-2 text-blue-600 hover:text-blue-800 underline"
                               >
-                                {publishedUrl}
+                                {publishedSite.accessUrl}
                               </a>
+                            </div>
+                            <div>
+                              <span className="font-medium">Production URL:</span>
+                              <a
+                                href={publishedSite.productionUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="ml-2 text-blue-600 hover:text-blue-800 underline"
+                              >
+                                {publishedSite.productionUrl}
+                              </a>
+                            </div>
+                            <div>
+                              <span className="font-medium">Subdomain:</span>
+                              <span className="ml-2 font-mono text-blue-900">{publishedSite.subdomain}</span>
                             </div>
                           </div>
                         </div>
                       )}
 
-                      {publishStatus && (
-                        <div className="p-3 rounded-lg bg-muted/50">
-                          <p className={`text-sm ${
-                            publishStatus.includes("❌") ? "text-red-500" :
-                            publishStatus.includes("🎉") ? "text-blue-500" :
-                            "text-muted-foreground"
-                          }`}>
-                            {publishStatus}
+                      {publishError && (
+                        <div className="p-3 rounded-lg bg-red-50 border border-red-200">
+                          <p className="text-sm text-red-700">
+                            ❌ Publish failed: {publishError.message}
                           </p>
                         </div>
                       )}

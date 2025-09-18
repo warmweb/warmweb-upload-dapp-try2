@@ -170,9 +170,11 @@ export function useSynapseClient() {
   };
 
   /**
-   * Upload bytes to Warm Storage and return PieceCID
+   * Upload bytes to Warm Storage and return PieceCID with timeout and fallback handling
    */
-  const uploadBytes = async (bytes: Uint8Array): Promise<{ pieceCid: string }> => {
+  const uploadBytes = async (bytes: Uint8Array, options?: { 
+    confirmationTimeout?: number; // Timeout in milliseconds for confirmation (default: 120000 = 2 minutes)
+  }): Promise<{ pieceCid: string }> => {
     if (!synapse || !address) {
       throw new Error("Wallet not connected. Please connect your wallet to continue.");
     }
@@ -231,28 +233,85 @@ export function useSynapseClient() {
         throw new Error("Insufficient allowances for upload. Please ensure deposits and allowances are set properly.");
       }
 
-      // Create storage service
-      const storageService = await synapse.createStorage();
+      // Create storage service with callbacks to capture dataset info
+      let resolvedDatasetId: string = '';
 
-      // Upload the bytes with retry logic for gas estimation failures
+      const storageService = await synapse.createStorage({
+        callbacks: {
+          onDataSetResolved: (info) => {
+            console.log("Dataset resolved from storageService:", info);
+            // Extract datasetId from the resolved dataset info
+            resolvedDatasetId = String(info?.dataSetId || '');
+            console.log("Resolved datasetId:", resolvedDatasetId);
+          },
+          onDataSetCreationProgress: (status) => {
+            console.log("Dataset creation progress:", status);
+            if (status.serverConfirmed && status.dataSetId) {
+              resolvedDatasetId = String(status.dataSetId);
+              console.log("New dataset created with ID:", resolvedDatasetId);
+            }
+          },
+        },
+      });
+
+      // Fallback to existing dataset if not resolved from callbacks
+      const currentDataset = datasets.length > 0 ? datasets[0] : null;
+      const datasetId = resolvedDatasetId || currentDataset?.clientDataSetId || '';
+
+      // Upload the bytes with retry logic and timeout handling
       let uploadAttempts = 0;
       const maxAttempts = 3;
-      
+      const confirmationTimeout = options?.confirmationTimeout || 120000; // 2 minutes timeout for confirmation
+
       while (uploadAttempts < maxAttempts) {
         try {
-          const { pieceCid } = await storageService.upload(bytes, {
-            onUploadComplete: (piece) => {
-              console.log("Upload complete, piece:", piece.toV1().toString());
-            },
-            onPieceAdded: (txResponse) => {
-              console.log("Piece added to dataset, tx:", txResponse?.hash);
-            },
-            onPieceConfirmed: (pieceIds) => {
-              console.log("Pieces confirmed:", pieceIds);
-            },
+          const uploadPromise = new Promise<{ pieceCid: string; datasetId: string }>((resolve, reject) => {
+            let pieceCid: string | null = null;
+            let txHash: string | null = null;
+            let confirmationReceived = false;
+            
+            // Set up timeout for confirmation
+            const timeoutId = setTimeout(() => {
+              if (!confirmationReceived && pieceCid) {
+                console.warn(`⚠️ Upload confirmation timeout after ${confirmationTimeout}ms, but piece was added. Using fallback resolution.`);
+                console.log(`Piece CID: ${pieceCid}, Transaction: ${txHash || 'unknown'}`);
+                resolve({ pieceCid, datasetId });
+              } else if (!confirmationReceived) {
+                reject(new Error(`Upload confirmation timeout after ${confirmationTimeout}ms. No piece was added.`));
+              }
+            }, confirmationTimeout);
+
+            storageService.upload(bytes, {
+              onUploadComplete: (piece) => {
+                pieceCid = piece.toV1().toString();
+                console.log("Upload complete, piece:", pieceCid);
+              },
+              onPieceAdded: (txResponse) => {
+                txHash = txResponse?.hash || null;
+                console.log("Piece added to dataset, tx:", txHash);
+                // Don't resolve here - wait for confirmation or timeout
+              },
+              onPieceConfirmed: (pieceIds) => {
+                confirmationReceived = true;
+                clearTimeout(timeoutId);
+                console.log("Pieces confirmed:", pieceIds);
+                console.log("Using datasetId from storageService:", datasetId);
+
+                if (pieceCid) {
+                  resolve({ pieceCid, datasetId });
+                } else {
+                  reject(new Error("Piece confirmed but no piece CID available"));
+                }
+              },
+            }).catch((error) => {
+              clearTimeout(timeoutId);
+              reject(error);
+            });
           });
+
+          const result = await uploadPromise;
+          return result;
           
-          return { pieceCid: pieceCid.toV1().toString() };
         } catch (retryError: any) {
           uploadAttempts++;
           console.log(`Upload attempt ${uploadAttempts} failed:`, retryError.message);
@@ -282,6 +341,8 @@ export function useSynapseClient() {
         errorMessage = "Smart contract error. This might be temporary network congestion or insufficient gas. Please try again in a few moments.";
       } else if (errorMessage.includes('500')) {
         errorMessage = "Server error occurred. This is likely temporary - please try again in a few moments.";
+      } else if (errorMessage.includes('confirmation timeout')) {
+        errorMessage = "Upload confirmation timed out. The file may have been uploaded but confirmation is delayed. Please check your transaction status.";
       }
       
       throw new Error(`Failed to upload bytes: ${errorMessage}`);
