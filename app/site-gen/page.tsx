@@ -46,6 +46,9 @@ export default function SiteGenPage() {
   const [lastUploadSize, setLastUploadSize] = useState<number>(0);
   const [showDebug, setShowDebug] = useState(false);
   const [durationAction, setDurationAction] = useState<{ type: 'deposit' | 'store', days: number } | null>(null);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishStatus, setPublishStatus] = useState("");
+  const [publishedUrl, setPublishedUrl] = useState("");
   const { isConnected, address, chainId } = useAccount();
 
   // Check if we're in development mode
@@ -355,7 +358,9 @@ export default function SiteGenPage() {
       // Provide helpful error messages
       let errorMessage = "❌ Upload failed: ";
       
-      if (error.message.includes("Insufficient USDFC")) {
+      if (error.message.includes("Gas estimation failed") || error.message.includes("insufficient") && error.message.includes("tFIL")) {
+        errorMessage += "Not enough tFIL tokens for gas fees. You need at least 0.1 tFIL to pay for transactions. Get test tFIL from the Calibration faucet: https://faucet.calibnet.chainsafe-fil.io/funds.html";
+      } else if (error.message.includes("Insufficient USDFC")) {
         errorMessage += "Not enough USDFC tokens. Get test USDFC from the Calibration faucet: https://forest-explorer.chainsafe.dev/faucet/calibnet_usdfc";
       } else if (error.message.includes("allowance") || error.message.includes("insufficient")) {
         errorMessage += "Storage allowances couldn't be set. This usually means you need to approve transactions in your wallet, or you don't have enough USDFC balance. Please check your wallet and try again.";
@@ -422,12 +427,57 @@ export default function SiteGenPage() {
     }
   };
 
+  const handlePublishToWarmWeb = async () => {
+    if (!uploadedPieceCid || !htmlContent) return;
+    
+    setIsPublishing(true);
+    setPublishStatus("🌐 Publishing to WarmWeb...");
+    
+    try {
+      const response = await fetch('https://warmweb.xyz/publish', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          pieceCid: uploadedPieceCid,
+          htmlContent: htmlContent,
+          prompt: prompt,
+          fileSize: zipSize,
+          timestamp: new Date().toISOString(),
+          address: address,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success && result.url) {
+        setPublishedUrl(result.url);
+        setPublishStatus("🎉 Successfully published to WarmWeb!");
+      } else {
+        throw new Error(result.error || 'Publishing failed');
+      }
+      
+    } catch (error: any) {
+      console.error('Publish failed:', error);
+      setPublishStatus(`❌ Publish failed: ${error.message}`);
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
   const handleResetAll = () => {
     setPrompt("");
     setHtmlContent("");
     setZipSize(0);
     setUploadStatus("");
     setUploadedPieceCid("");
+    setPublishStatus("");
+    setPublishedUrl("");
   };
 
   // Handle simple deposit
@@ -986,6 +1036,62 @@ export default function SiteGenPage() {
                           ZIP
                         </motion.button>
                       </div>
+
+                      {/* Publish to WarmWeb Button - appears after successful deployment */}
+                      {uploadedPieceCid && !publishedUrl && (
+                        <motion.button
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={handlePublishToWarmWeb}
+                          disabled={isPublishing}
+                          className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.3 }}
+                        >
+                          {isPublishing ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <Globe className="w-5 h-5" />
+                          )}
+                          {isPublishing ? "Publishing..." : "Publish to WarmWeb"}
+                        </motion.button>
+                      )}
+                      
+                      {/* Published URL Display */}
+                      {publishedUrl && (
+                        <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                          <div className="flex items-center gap-2 mb-2">
+                            <CheckCircle className="w-5 h-5 text-blue-600" />
+                            <h4 className="font-semibold text-blue-800">Published to WarmWeb!</h4>
+                          </div>
+                          <div className="text-sm text-blue-700 space-y-1">
+                            <div>
+                              <span className="font-medium">Live URL:</span>
+                              <a 
+                                href={publishedUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="ml-2 text-blue-600 hover:text-blue-800 underline"
+                              >
+                                {publishedUrl}
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {publishStatus && (
+                        <div className="p-3 rounded-lg bg-muted/50">
+                          <p className={`text-sm ${
+                            publishStatus.includes("❌") ? "text-red-500" :
+                            publishStatus.includes("🎉") ? "text-blue-500" :
+                            "text-muted-foreground"
+                          }`}>
+                            {publishStatus}
+                          </p>
+                        </div>
+                      )}
 
                       {uploadedPieceCid && (
                         <div className="p-4 bg-green-50 border border-green-200 rounded-xl">

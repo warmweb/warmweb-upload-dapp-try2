@@ -20,6 +20,35 @@ export function useSynapseClient() {
     : "https://faucet.filecoin.io/"; // Mainnet faucet (if available)
 
   /**
+   * Calculate estimated gas requirements for storage operations
+   */
+  const calculateGasRequirements = (fileSizeBytes: number) => {
+    // Base gas for Filecoin storage operations (empirically determined)
+    const baseGasLimit = 20000000n; // 20M gas base
+    
+    // Additional gas per MB of data
+    const fileSizeMB = Math.ceil(fileSizeBytes / (1024 * 1024));
+    const additionalGas = BigInt(fileSizeMB) * 2000000n; // 2M gas per MB
+    
+    // Total with safety margin for network congestion
+    const totalGasLimit = (baseGasLimit + additionalGas) * 150n / 100n; // 50% safety margin
+    
+    // Gas price recommendations (in attoFIL)
+    const gasPrice = isCalibration ? 1500000000n : 3000000000n; // 1.5-3 Gwei
+    
+    // Estimated cost in FIL
+    const estimatedCostWei = totalGasLimit * gasPrice;
+    const estimatedCostFil = Number(estimatedCostWei) / 1e18;
+    
+    return {
+      gasLimit: totalGasLimit,
+      gasPrice,
+      estimatedCostFil,
+      recommendedMinBalance: estimatedCostFil * 2, // Double for safety
+    };
+  };
+
+  /**
    * Get current balances for USDFC and FIL
    */
   const getBalances = async (): Promise<{ usdfc: string; fil: string }> => {
@@ -149,13 +178,27 @@ export function useSynapseClient() {
     }
 
     try {
-      // Check FIL balance for gas fees
-      const filBalance = await synapse.payments.walletBalance();
-      const minFilNeeded = BigInt("100000000000000000"); // 0.1 FIL minimum for gas
+      // Pre-check gas requirements with detailed calculation
+      const gasReq = calculateGasRequirements(bytes.length);
+      console.log(`Gas Requirements Check:`, {
+        fileSize: bytes.length,
+        estimatedCost: gasReq.estimatedCostFil,
+        recommendedMin: gasReq.recommendedMinBalance,
+        network: isCalibration ? 'Calibration' : 'Mainnet'
+      });
       
-      if (filBalance < minFilNeeded) {
-        throw new Error(`Insufficient ${filTokenName} for gas fees. You have ${Number(filBalance) / 1e18} ${filTokenName}, but need at least 0.1 ${filTokenName}. Get test tokens from: ${filFaucetUrl}`);
+      // Check FIL balance for gas fees with dynamic requirements
+      const filBalance = await synapse.payments.walletBalance();
+      const requiredBalance = BigInt(Math.ceil(gasReq.recommendedMinBalance * 1e18));
+      
+      if (filBalance < requiredBalance) {
+        const currentFil = Number(filBalance) / 1e18;
+        throw new Error(
+          `Insufficient ${filTokenName} for estimated gas costs. Need at least ${gasReq.recommendedMinBalance.toFixed(4)} ${filTokenName} but have ${currentFil.toFixed(4)} ${filTokenName}. Get more from: ${filFaucetUrl}`
+        );
       }
+      
+      console.log(`✅ Gas check passed. Proceeding with upload...`);
 
       // Check if we have datasets
       const datasets = await synapse.storage.findDataSets(address);
@@ -191,22 +234,43 @@ export function useSynapseClient() {
       // Create storage service
       const storageService = await synapse.createStorage();
 
-      // Upload the bytes
-      const { pieceCid } = await storageService.upload(bytes, {
-        onUploadComplete: (piece) => {
-          console.log("Upload complete, piece:", piece.toV1().toString());
-        },
-        onPieceAdded: (txResponse) => {
-          console.log("Piece added to dataset, tx:", txResponse?.hash);
-        },
-        onPieceConfirmed: (pieceIds) => {
-          console.log("Pieces confirmed:", pieceIds);
-        },
-      });
+      // Upload the bytes with retry logic for gas estimation failures
+      let uploadAttempts = 0;
+      const maxAttempts = 3;
+      
+      while (uploadAttempts < maxAttempts) {
+        try {
+          const { pieceCid } = await storageService.upload(bytes, {
+            onUploadComplete: (piece) => {
+              console.log("Upload complete, piece:", piece.toV1().toString());
+            },
+            onPieceAdded: (txResponse) => {
+              console.log("Piece added to dataset, tx:", txResponse?.hash);
+            },
+            onPieceConfirmed: (pieceIds) => {
+              console.log("Pieces confirmed:", pieceIds);
+            },
+          });
+          
+          return { pieceCid: pieceCid.toV1().toString() };
+        } catch (retryError: any) {
+          uploadAttempts++;
+          console.log(`Upload attempt ${uploadAttempts} failed:`, retryError.message);
+          
+          if (uploadAttempts >= maxAttempts) {
+            throw retryError; // Re-throw after max attempts
+          }
+          
+          // Wait before retry (exponential backoff)
+          await new Promise(resolve => setTimeout(resolve, 2000 * uploadAttempts));
+        }
+      }
 
-      return { pieceCid: pieceCid.toV1().toString() };
+      // This should never be reached, but TypeScript requires it
+      throw new Error("Upload failed after all retry attempts");
       
     } catch (error: any) {
+      console.log('error', error)
       // Enhanced error handling for common Filecoin errors
       let errorMessage = error.message || 'Unknown error';
       
@@ -380,5 +444,6 @@ export function useSynapseClient() {
     checkAllowanceStatus,
     checkWarmStorageAllowances,
     checkUSDFCDeposit,
+    calculateGasRequirements,
   };
 }

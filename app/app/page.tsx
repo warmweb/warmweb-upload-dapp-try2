@@ -7,7 +7,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import Confetti from "@/components/ui/Confetti";
 import { useConfetti } from "@/hooks/useConfetti";
 import { DatasetsViewer } from "@/components/DatasetsViewer";
-import { SiteGenerator } from "@/components/SiteGenerator";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useBalances } from "@/hooks/useBalances";
 import Github from "@/components/ui/icons/Github";
@@ -251,7 +250,7 @@ function AppPageContent() {
                   >
                     <FileUploader />
                   </motion.div>
-                ) : activeTab === "datasets" ? (
+                ) : activeTab === "datasets" && (
                   <motion.div
                     key="datasets"
                     initial={{ opacity: 0, x: 20 }}
@@ -265,22 +264,6 @@ function AppPageContent() {
                   >
                     <DatasetsViewer />
                   </motion.div>
-                ) : (
-                  activeTab === "site-gen" && (
-                    <motion.div
-                      key="site-gen"
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -20 }}
-                      transition={{
-                        type: "spring",
-                        stiffness: 200,
-                        damping: 20,
-                      }}
-                    >
-                      <SiteGenerator />
-                    </motion.div>
-                  )
                 )}
               </AnimatePresence>
             </motion.div>
