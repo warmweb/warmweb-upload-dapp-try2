@@ -1,15 +1,15 @@
-# Filecoin Synapse dApp Tutorial
+# WarmWeb
 
-This repo will serve with tutorial to demonstrate how to build a decentralized application (dApp) that interacts with Filecoin Synapse - a smart-contract based marketplace for storage and other services in the Filecoin ecosystem.
+WarmWeb demonstrates how FileCoin can support static website deployments with the use of AI. This decentralized application (dApp) showcases the future of web hosting by combining AI-powered website generation with decentralized storage on the Filecoin network.
 
 ## Overview
 
-This dApp showcases:
-- Connecting to Filecoin networks (Mainnet/Calibration)
-- Installing synapse-sdk to your project.
-- Depositing funds to Synapse contracts using USDFC token.
-- Uploading files to Filecoin through Synapse
-- **NEW:** Site Gen (Synapse) - Generate static websites and store them on Filecoin
+WarmWeb demonstrates:
+- **AI-Powered Website Generation**: Create static websites from simple text prompts using AI
+- **Decentralized Storage**: Store generated websites on Filecoin through Synapse
+- **Wallet Integration**: Connect to Filecoin networks (Mainnet/Calibration) with web3 wallets
+- **Smart Contract Interaction**: Deposit funds and manage storage through USDFC tokens
+- **Transparent Deployment**: Download and verify the exact artifacts stored on Filecoin
 
 ## Prerequisites
 
@@ -23,8 +23,8 @@ This dApp showcases:
 
 1. Clone this repository:
 ```bash
-git clone https://github.com/yourusername/fs-upload-app
-cd fs-upload-app
+git clone https://github.com/warmweb/warmweb-upload-dapp
+cd warmweb-upload-dapp
 ```
 
 2. Install dependencies:
@@ -46,38 +46,38 @@ NEXT_PUBLIC_WARMWEB_SERVER_URL=https://warmweb.xyz
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to view the dApp.
+Open [http://localhost:3000](http://localhost:3000) to view WarmWeb.
 
 ## Key Components
 
+### AI-Powered Website Generation
+WarmWeb's core feature transforms text prompts into fully functional static websites:
+- **Natural Language Input**: Describe your website in plain English
+- **Instant Preview**: See your generated website before deployment
+- **Responsive Design**: Auto-generated websites work on all devices
+- **Filecoin Branding**: Websites showcase Filecoin ecosystem integration
+
+### Decentralized Storage via Filecoin
+All generated websites are stored on Filecoin's decentralized network:
+- **Synapse Integration**: Uses Filecoin Synapse for reliable storage marketplace
+- **USDFC Payment**: Pay for storage using USDFC stablecoin
+- **PieceCID Tracking**: Get unique identifiers for website retrieval
+- **Transparent Artifacts**: Download exact files stored on the network
+
 ### Wallet Connection
-The dApp uses RainbowKit for seamless wallet connection, configured specifically for Filecoin networks:
+WarmWeb uses RainbowKit for seamless wallet connection, configured for Filecoin networks:
 - Filecoin Mainnet
 - Filecoin Calibration (testnet)
 
-### Query token and storage usage Balances
-Shows how to:
-- Get user FIL-USDFC-SynapseStorageUsage balances
-- hook used to query user balances [link](https://github.com/FIL-Builders/fs-upload-dapp/blob/main/hooks/useBalances.ts)
+### Smart Contract Management
+The application handles all blockchain interactions automatically:
+- Balance checking for tFIL and USDFC tokens
+- Automatic storage payment and approval flows
+- Real-time transaction monitoring and status updates
 
-### Pay For Storage with USDFC
-Demonstrates how to:
-- Pay for storage by depositing funds to Synapse contracts using USDFC token
-- Handles one time payment for 10GB usage that persists 30days
-- Notifies repayment if less than 10days remain for paying synapse based on current usage
-- hook used to conduct a payment [link](https://github.com/FIL-Builders/fs-upload-dapp/blob/main/hooks/usePayment.ts)
+## How WarmWeb Works
 
-### File Upload
-Shows how to:
-- Create a user-friendly file upload interface
-- Upload file to Filecoin using synapse-sdk
-- Monitor upload status
-- Download filecoin from Filecoin using synapse-sdk
-- hook used to upload a file [link](https://github.com/FIL-Builders/fs-upload-dapp/blob/main/hooks/useFileUpload.ts)
-
-## Site Gen (Synapse) Demo
-
-**NEW FEATURE**: The dApp now includes a site generator that creates static websites from text prompts and stores them on Filecoin via Synapse Warm Storage.
+WarmWeb demonstrates the seamless integration of AI and decentralized storage through an intuitive workflow.
 
 ### Quick Start Flow
 
