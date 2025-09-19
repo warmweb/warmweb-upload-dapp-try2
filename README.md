@@ -160,6 +160,7 @@ The app provides human-readable error messages:
 
 ## Learn More
 
+- [System Architecture](./SYS_ARCHI.md) - Detailed technical architecture and data flows
 - [Filecoin synapse-sdk](https://github.com/FilOzone/synapse-sdk)
 - [USDFC Token Documentation](https://docs.secured.finance/usdfc-stablecoin/getting-started)
 - [Wagmi Documentation](https://wagmi.sh)
