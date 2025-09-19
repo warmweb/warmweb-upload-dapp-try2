@@ -4,6 +4,7 @@ import type { Metadata } from 'next'
 import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
 import { Analytics } from '@vercel/analytics/next'
+import { SpeedInsights } from '@vercel/speed-insights/next';
 import './globals.css'
 import { WagmiProvider } from "wagmi";
 import { filecoin, filecoinCalibration } from "wagmi/chains";
@@ -50,6 +51,7 @@ export default function RootLayout({
               >
                 <SynapseProvider>
                   {children}
+                  <SpeedInsights />
                 </SynapseProvider>
               </RainbowKitProvider>
             </WagmiProvider>
