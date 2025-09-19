@@ -1,7 +1,16 @@
-import { TemplateEngine, TemplateData } from './templateEngine';
-
 export interface LandingPagePrompt {
   userInput: string;
+  sections?: Record<string, boolean>;
+  theme?: {
+    palette: string;
+    font: string;
+    logo?: string;
+  };
+  animations?: {
+    global: string;
+    perSection?: Record<string, string>;
+  };
+  features?: Record<string, boolean>;
 }
 
 export interface ParsedContent {
@@ -26,10 +35,8 @@ export interface ParsedContent {
 }
 
 export class AILandingPageGenerator {
-  private templateEngine: TemplateEngine;
-
   constructor() {
-    this.templateEngine = new TemplateEngine();
+    // No template engine needed anymore - using AI API
   }
 
   parsePrompt(prompt: string): ParsedContent {
@@ -257,21 +264,238 @@ export class AILandingPageGenerator {
     return templates[businessType as keyof typeof templates] || templates.default;
   }
 
-  async generateLandingPage(prompt: LandingPagePrompt): Promise<string> {
-    // Parse the user prompt to extract structured data
-    const parsedContent = this.parsePrompt(prompt.userInput);
+  async generateLandingPage(config: LandingPagePrompt, aiPrompt: string): Promise<string> {
+    try {
+      const response = await fetch('/api/generate-page', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: aiPrompt,
+          config: config
+        }),
+      });
 
-    // Create template data
-    const templateData: TemplateData = {
-      title: parsedContent.title,
-      description: parsedContent.description,
-      theme: parsedContent.theme,
-      sections: parsedContent.sections,
-      features: parsedContent.features
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.html) {
+        throw new Error('No HTML content received from AI');
+      }
+
+      return data.html;
+    } catch (error: any) {
+      console.error('AI generation failed:', error);
+
+      // Return a fallback template with the user's configuration
+      return this.getFallbackTemplate(config);
+    }
+  }
+
+  private getFallbackTemplate(config: LandingPagePrompt): string {
+    const businessName = this.extractBusinessName(config.userInput);
+    const theme = config.theme || { palette: 'blue', font: 'inter' };
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${businessName} - Professional Landing Page</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: ${this.getFontFamily(theme.font)};
+            line-height: 1.6;
+            color: #333;
+            background: #f8fafc;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .hero {
+            background: linear-gradient(135deg, ${this.getPrimaryColor(theme.palette)}, ${this.getSecondaryColor(theme.palette)});
+            color: white;
+            padding: 100px 0;
+            text-align: center;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
+        .hero p {
+            font-size: 1.25rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+        }
+
+        .cta-button {
+            display: inline-block;
+            background: white;
+            color: ${this.getPrimaryColor(theme.palette)};
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: transform 0.3s ease;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-2px);
+        }
+
+        .features {
+            padding: 80px 0;
+            background: white;
+        }
+
+        .features h2 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 3rem;
+            color: #1a202c;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .feature-card {
+            text-align: center;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            background: #f8fafc;
+        }
+
+        .feature-icon {
+            width: 60px;
+            height: 60px;
+            background: ${this.getPrimaryColor(theme.palette)};
+            border-radius: 50%;
+            margin: 0 auto 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.5rem;
+        }
+
+        .footer {
+            background: #1a202c;
+            color: white;
+            padding: 40px 0;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+
+            .hero p {
+                font-size: 1.1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <section class="hero">
+        <div class="container">
+            <h1>${businessName}</h1>
+            <p>${config.userInput}</p>
+            <a href="#contact" class="cta-button">Get Started</a>
+        </div>
+    </section>
+
+    <section class="features">
+        <div class="container">
+            <h2>Why Choose Us</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">✓</div>
+                    <h3>Professional Service</h3>
+                    <p>High-quality solutions delivered by experienced professionals.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Fast & Reliable</h3>
+                    <p>Quick turnaround times without compromising on quality.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🎯</div>
+                    <h3>Results Driven</h3>
+                    <p>Focused on delivering measurable results for your business.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; ${new Date().getFullYear()} ${businessName}. All rights reserved.</p>
+            <p>Generated with AI-powered landing page builder</p>
+        </div>
+    </footer>
+</body>
+</html>`;
+  }
+
+  private extractBusinessName(input: string): string {
+    // Try to extract business name from input
+    const matches = input.match(/(?:for|called|named)\s+["']([^"']+)["']/i) ||
+                   input.match(/^([A-Z][^.!?]+)/);
+    return matches ? matches[1] : 'Your Business';
+  }
+
+  private getFontFamily(font: string): string {
+    const fonts = {
+      inter: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif',
+      roboto: 'Roboto, -apple-system, BlinkMacSystemFont, sans-serif',
+      poppins: 'Poppins, -apple-system, BlinkMacSystemFont, sans-serif',
+      montserrat: 'Montserrat, -apple-system, BlinkMacSystemFont, sans-serif'
     };
+    return fonts[font as keyof typeof fonts] || fonts.inter;
+  }
 
-    // Generate HTML using the template engine
-    return this.templateEngine.generateHTML(templateData);
+  private getPrimaryColor(palette: string): string {
+    const colors = {
+      blue: '#3B82F6',
+      emerald: '#10B981',
+      purple: '#8B5CF6',
+      orange: '#F59E0B'
+    };
+    return colors[palette as keyof typeof colors] || colors.blue;
+  }
+
+  private getSecondaryColor(palette: string): string {
+    const colors = {
+      blue: '#1E40AF',
+      emerald: '#059669',
+      purple: '#7C3AED',
+      orange: '#D97706'
+    };
+    return colors[palette as keyof typeof colors] || colors.blue;
   }
 
   // Method to get a preview of what would be generated without full HTML

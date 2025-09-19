@@ -321,7 +321,15 @@ CODE STRUCTURE:
       setGeneratedPrompt(aiPrompt);
 
       // Use AI to generate a professional landing page
-      const generatedHTML = await aiGenerator.generateLandingPage({ userInput: userPrompt });
+      const config = {
+        userInput: userPrompt,
+        sections: selectedSections,
+        theme: theme,
+        animations: animations,
+        features: features
+      };
+
+      const generatedHTML = await aiGenerator.generateLandingPage(config, aiPrompt);
 
       return generatedHTML;
     } catch (error) {
