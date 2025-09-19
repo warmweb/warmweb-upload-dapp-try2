@@ -36,9 +36,10 @@ npm install
 ```bash
 cp .env.example .env.local
 ```
-Edit `.env.local` to customize the WarmWeb server URL if needed:
+Edit `.env.local` to customize the WarmWeb server URL if needed as well as OPEN_API_KEY:
 ```
 NEXT_PUBLIC_WARMWEB_SERVER_URL=https://warmweb.xyz
+OPENAI_API_KEY=sk-proj-open_api_key
 ```
 
 4. Run the development server:
