@@ -8,8 +8,9 @@ import { useSiteZip } from "@/hooks/useSiteZip";
 import { useSynapseClient } from "@/hooks/useSynapseClient";
 import { useBalances } from "@/hooks/useBalances";
 import { usePublishSite } from "@/hooks/usePublishSite";
-import { ArrowLeft, Download, Upload, Globe, Loader2, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { ArrowLeft, Download, Upload, Globe, Loader2, CheckCircle, XCircle, AlertCircle, Wand2, Eye, Sparkles, Settings, Users, Star, MessageSquare, Building, Award, Mail, BarChart3, FileText, Copy, Palette, Zap, ToggleLeft, ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
+import { AILandingPageGenerator } from "@/lib/aiLandingPageGenerator";
 
 const fadeInUp = {
   hidden: { opacity: 0, y: 20 },
@@ -24,10 +25,44 @@ const stagger = {
   }
 };
 
+// Configuration constants
+const COLOR_PALETTES = [
+  { id: 'blue', name: 'Ocean Blue', primary: '#3B82F6', secondary: '#1E40AF', accent: '#60A5FA' },
+  { id: 'emerald', name: 'Forest Green', primary: '#10B981', secondary: '#059669', accent: '#34D399' },
+  { id: 'purple', name: 'Royal Purple', primary: '#8B5CF6', secondary: '#7C3AED', accent: '#A78BFA' },
+  { id: 'orange', name: 'Sunset Orange', primary: '#F59E0B', secondary: '#D97706', accent: '#FBBF24' },
+];
+
+const FONT_OPTIONS = [
+  { id: 'inter', name: 'Inter', family: 'Inter, sans-serif', preview: 'Modern & Clean' },
+  { id: 'roboto', name: 'Roboto', family: 'Roboto, sans-serif', preview: 'Professional & Readable' },
+  { id: 'poppins', name: 'Poppins', family: 'Poppins, sans-serif', preview: 'Friendly & Geometric' },
+  { id: 'montserrat', name: 'Montserrat', family: 'Montserrat, sans-serif', preview: 'Elegant & Sophisticated' },
+];
+
+const ANIMATION_OPTIONS = [
+  { id: 'fade', name: 'Fade In', description: 'Gentle fade-in effect' },
+  { id: 'slide', name: 'Slide Up', description: 'Smooth slide from bottom' },
+  { id: 'parallax', name: 'Parallax', description: 'Layered scrolling effect' },
+  { id: 'zoom', name: 'Zoom In', description: 'Scale and fade effect' },
+  { id: 'none', name: 'No Animation', description: 'Static appearance' },
+];
+
+const FEATURE_OPTIONS = [
+  { id: 'darkModeToggle', name: 'Dark Mode Toggle', description: 'Allow users to switch between light and dark themes' },
+  { id: 'smoothScrolling', name: 'Smooth Scrolling', description: 'Smooth page navigation with scroll effects' },
+  { id: 'lazyLoading', name: 'Lazy Loading', description: 'Optimize performance with lazy-loaded images' },
+  { id: 'mobileMenu', name: 'Mobile Menu', description: 'Responsive hamburger menu for mobile devices' },
+  { id: 'backToTop', name: 'Back to Top', description: 'Floating button to scroll back to top' },
+];
+
 export default function SiteGenPage() {
   const [prompt, setPrompt] = useState("");
   const [htmlContent, setHtmlContent] = useState("");
   const [zipSize, setZipSize] = useState(0);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationPreview, setGenerationPreview] = useState<any>(null);
+  const [aiGenerator] = useState(() => new AILandingPageGenerator());
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState("");
   const [uploadedPieceCid, setUploadedPieceCid] = useState("");
@@ -47,6 +82,40 @@ export default function SiteGenPage() {
   const [showDebug, setShowDebug] = useState(false);
   const [durationAction, setDurationAction] = useState<{ type: 'deposit' | 'store', days: number } | null>(null);
   const [uploadResult, setUploadResult] = useState<any>(null);
+  const [selectedSections, setSelectedSections] = useState({
+    hero: true,
+    features: true,
+    testimonials: false,
+    about: false,
+    pricing: false,
+    contact: false,
+    stats: false,
+    team: false
+  });
+  const [theme, setTheme] = useState({
+    palette: 'blue' as const,
+    font: 'inter' as const,
+    logo: ''
+  });
+  const [animations, setAnimations] = useState({
+    global: 'fade' as const,
+    perSection: {} as Record<string, string>
+  });
+  const [features, setFeatures] = useState({
+    darkModeToggle: true,
+    smoothScrolling: true,
+    lazyLoading: true,
+    mobileMenu: true,
+    backToTop: false
+  });
+  const [expandedSections, setExpandedSections] = useState({
+    sections: true,
+    theme: false,
+    animations: false,
+    features: false
+  });
+  const [activeTab, setActiveTab] = useState<'preview' | 'prompt'>('preview');
+  const [generatedPrompt, setGeneratedPrompt] = useState('');
   const { isConnected, address, chainId } = useAccount();
 
   // Check if we're in development mode
@@ -189,8 +258,77 @@ export default function SiteGenPage() {
     }
   }, [isConnected, chainId, balances, checklistStatus, lastUploadSize]);
 
-  const generateHTML = (userPrompt: string): string => {
-    return `<!DOCTYPE html>
+  const generateHTML = async (userPrompt: string): Promise<string> => {
+    try {
+      setIsGenerating(true);
+
+      // Generate AI prompt based on all configurations
+      const selectedSectionsList = Object.entries(selectedSections)
+        .filter(([_, selected]) => selected)
+        .map(([section, _]) => section);
+
+      const selectedPalette = COLOR_PALETTES.find(p => p.id === theme.palette);
+      const selectedFont = FONT_OPTIONS.find(f => f.id === theme.font);
+      const selectedAnimation = ANIMATION_OPTIONS.find(a => a.id === animations.global);
+      const enabledFeatures = Object.entries(features)
+        .filter(([_, enabled]) => enabled)
+        .map(([feature, _]) => FEATURE_OPTIONS.find(f => f.id === feature)?.name)
+        .filter(Boolean);
+
+      const aiPrompt = `Create a professional landing page for: ${userPrompt}
+
+SECTIONS TO INCLUDE:
+${selectedSectionsList.map(section => `- ${section.charAt(0).toUpperCase() + section.slice(1)}`).join('\n')}
+
+THEME & BRANDING:
+- Color Palette: ${selectedPalette?.name} (Primary: ${selectedPalette?.primary}, Secondary: ${selectedPalette?.secondary})
+- Typography: ${selectedFont?.name} (${selectedFont?.family})
+- Style: ${selectedFont?.preview}
+
+ANIMATIONS:
+- Global Animation: ${selectedAnimation?.name} - ${selectedAnimation?.description}
+- Apply consistent ${animations.global} animations throughout the page
+
+FEATURES TO IMPLEMENT:
+${enabledFeatures.map(feature => `- ${feature}`).join('\n')}
+
+TECHNICAL REQUIREMENTS:
+- Modern, clean design with professional styling
+- Responsive layout that works on all devices
+- Clear call-to-action buttons using the specified color palette
+- Consistent typography using ${selectedFont?.family}
+- High-quality placeholder images where appropriate
+- SEO-friendly structure with proper meta tags
+- Fast loading and optimized code
+- Accessibility features (ARIA labels, proper contrast)
+
+DESIGN SPECIFICATIONS:
+- Use the ${selectedPalette?.name} color scheme throughout
+- Primary color: ${selectedPalette?.primary} for main CTAs and accents
+- Secondary color: ${selectedPalette?.secondary} for supporting elements
+- Typography: ${selectedFont?.family} for all text elements
+- Animation style: Implement ${selectedAnimation?.description} for page elements
+- Modern UI patterns with clean spacing and visual hierarchy
+- Professional business appearance suitable for ${userPrompt}
+
+CODE STRUCTURE:
+- Single HTML file with embedded CSS and JavaScript
+- Mobile-first responsive design
+- Cross-browser compatible
+- Optimized for performance and loading speed
+`;
+
+      setGeneratedPrompt(aiPrompt);
+
+      // Use AI to generate a professional landing page
+      const generatedHTML = await aiGenerator.generateLandingPage({ userInput: userPrompt });
+
+      return generatedHTML;
+    } catch (error) {
+      console.error('AI generation failed, falling back to simple template:', error);
+
+      // Fallback to simple template
+      return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -260,12 +398,12 @@ export default function SiteGenPage() {
 <body>
     <div class="container">
         <h1>🚀 Deployed via Filecoin Onchain Cloud</h1>
-        
+
         <div class="prompt-section">
             <p><strong>Prompt:</strong></p>
             <pre>${userPrompt}</pre>
         </div>
-        
+
         <div class="footer">
             <a href="https://filecoin.io" class="filecoin-badge" target="_blank">
                 🌐 Powered by Filecoin
@@ -275,21 +413,38 @@ export default function SiteGenPage() {
     </div>
 </body>
 </html>`;
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handlePreviewGeneration = () => {
+    if (!prompt.trim()) return;
+
+    try {
+      const preview = aiGenerator.previewGeneration(prompt);
+      setGenerationPreview(preview);
+    } catch (error) {
+      console.error('Preview generation failed:', error);
+    }
   };
 
   const handleBuildPreview = async () => {
     if (!prompt.trim()) return;
-    
-    const html = generateHTML(prompt);
+
+    const html = await generateHTML(prompt);
     setHtmlContent(html);
-    
+
     // Calculate ZIP size
     const zip = new JSZip();
     zip.file("index.html", html);
-    zip.file("README.md", `# Generated Website\n\nPrompt: "${prompt}"\n\nGenerated on: ${new Date().toISOString()}\n`);
-    
+    zip.file("README.md", `# Generated Landing Page\n\nPrompt: "${prompt}"\n\nGenerated on: ${new Date().toISOString()}\n\nGenerated with AI-powered landing page builder.\n`);
+
     const zipBlob = await zip.generateAsync({ type: "blob" });
     setZipSize(zipBlob.size);
+
+    // Switch to preview tab to show the generated content
+    setActiveTab('preview');
   };
 
   const handleStoreWithSynapse = async () => {
@@ -522,456 +677,435 @@ export default function SiteGenPage() {
                          checklistStatus.warmStorageApproved;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/5">
-      <div className="container mx-auto p-6 max-w-7xl">
-        <motion.div
-          initial="hidden"
-          animate="visible"
-          variants={stagger}
-          className="space-y-8"
-        >
-          {/* Header */}
-          <motion.div variants={fadeInUp} className="text-center mb-8">
-            <div className="flex items-center justify-center gap-4 mb-4">
-              <Link href="/" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
-                <ArrowLeft className="w-5 h-5" />
-                Back to Dashboard
-              </Link>
+    <div className="min-h-screen bg-gray-50 dark:bg-dark-bg text-gray-900 dark:text-gray-100 transition-colors duration-300">
+      {/* Header */}
+      <header className="bg-white dark:bg-dark-surface border-b border-gray-200 dark:border-gray-600 sticky top-0 z-50 transition-colors duration-300">
+        <div className="flex items-center justify-between px-6 py-4">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+              <Wand2 className="text-white text-sm" />
             </div>
-            <div className="flex items-center justify-center gap-4 mb-6">
-              <Globe className="w-12 h-12 text-primary" />
-              <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-                Site Generator
-              </h1>
-            </div>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Create professional websites with AI and deploy them to the decentralized web
-            </p>
-          </motion.div>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+              AI Landing Page Generator
+            </h1>
+          </div>
 
-          {!isConnected && (
+          <div className="flex items-center space-x-4">
+            {isConnected && (
+              <div className="flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${isCalibration ? 'bg-yellow-500' : 'bg-green-500'}`}></div>
+                  <span className="text-gray-600 dark:text-gray-400">
+                    {isCalibration ? "Calibration" : "Mainnet"}
+                  </span>
+                </div>
+                <div className="text-gray-600 dark:text-gray-400">
+                  {parseFloat(balances.usdfc).toFixed(1)} USDFC
+                </div>
+                <div className="text-gray-600 dark:text-gray-400">
+                  {parseFloat(balances.fil).toFixed(2)} {filTokenName}
+                </div>
+              </div>
+            )}
+            <Link href="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors">
+              <ArrowLeft className="w-4 h-4" />
+              Back to Dashboard
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      {!isConnected ? (
+        <div className="container mx-auto p-6 max-w-7xl">
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            variants={stagger}
+            className="space-y-8"
+          >
             <motion.div variants={fadeInUp} className="text-center py-12">
-              <div className="bg-card rounded-2xl p-8 shadow-lg border max-w-md mx-auto">
-                <Globe className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                <h2 className="text-2xl font-semibold mb-4">Connect Your Wallet</h2>
-                <p className="text-muted-foreground mb-6">
+              <div className="bg-white dark:bg-dark-surface rounded-2xl p-8 shadow-lg border border-gray-200 dark:border-gray-600 max-w-md mx-auto">
+                <Globe className="w-16 h-16 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+                <h2 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Connect Your Wallet</h2>
+                <p className="text-gray-600 dark:text-gray-400 mb-6">
                   Connect your Web3 wallet to start creating and deploying websites
                 </p>
                 <ConnectButton />
               </div>
             </motion.div>
-          )}
+          </motion.div>
+        </div>
+      ) : (
+        <div className="flex h-[calc(100vh-73px)]">
+          {/* Configuration Wizard Sidebar */}
+          <div className="w-80 bg-white dark:bg-dark-surface border-r border-gray-200 dark:border-gray-600 overflow-y-auto">
+            <div className="p-6">
+              {/* Wizard Header */}
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
+                  <Settings className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Page Configuration</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Customize your landing page sections</p>
+                </div>
+              </div>
 
-          {isConnected && (
-            <>
-              {/* Status Panel */}
-              <motion.div variants={fadeInUp} className="bg-card/50 backdrop-blur-sm border rounded-2xl p-6 shadow-lg mb-8">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-                      <CheckCircle className="w-5 h-5 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-semibold">Account Status</h3>
-                      <p className="text-sm text-muted-foreground">Monitor your wallet and storage metrics</p>
-                    </div>
-                  </div>
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={async () => {
-                      setIsLoadingBalances(true);
-                      try {
-                        const balanceData = await getBalances();
-                        setBalances(balanceData);
-                        await checkUploadRequirements();
-                      } catch (error) {
-                        console.error("Failed to refresh balances:", error);
-                      } finally {
-                        setIsLoadingBalances(false);
-                      }
-                    }}
-                    disabled={isLoadingBalances}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-all"
+              {/* Business Description */}
+              <div className="mb-6">
+                <label htmlFor="prompt" className="block text-sm font-semibold mb-3 text-gray-900 dark:text-gray-100">
+                  Business Description
+                </label>
+                <textarea
+                  id="prompt"
+                  value={prompt}
+                  onChange={(e) => {
+                    setPrompt(e.target.value);
+                    if (e.target.value.trim()) {
+                      handlePreviewGeneration();
+                    }
+                  }}
+                  placeholder="Describe your business, product, or service..."
+                  className="w-full h-24 p-3 border border-gray-300 dark:border-gray-600 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
+                  disabled={isUploading || isGenerating}
+                />
+              </div>
+
+              {/* Configuration Sections */}
+              <div className="space-y-4">
+                {/* Page Sections */}
+                <div className="border border-gray-200 dark:border-gray-600 rounded-xl">
+                  <button
+                    onClick={() => setExpandedSections(prev => ({ ...prev, sections: !prev.sections }))}
+                    className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                   >
-                    {isLoadingBalances ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                    <div className="flex items-center gap-3">
+                      <Building className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                      <div>
+                        <h4 className="font-semibold text-gray-900 dark:text-gray-100">Page Sections</h4>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Choose which sections to include</p>
+                      </div>
+                    </div>
+                    {expandedSections.sections ? (
+                      <ChevronDown className="w-5 h-5 text-gray-400" />
                     ) : (
-                      <CheckCircle className="w-4 h-4" />
+                      <ChevronRight className="w-5 h-5 text-gray-400" />
                     )}
-                    {isLoadingBalances ? "Refreshing..." : "Refresh"}
-                  </motion.button>
-                </div>
-                {/* Network Status */}
-                <div className="mb-6 p-4 bg-secondary/30 border rounded-xl">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-3 h-3 rounded-full ${isCalibration ? 'bg-yellow-500' : 'bg-green-500'}`}></div>
-                    <span className="font-medium">Network:</span>
-                    <span className="text-muted-foreground">
-                      {isCalibration ? "Filecoin Calibration (Testnet)" : "Filecoin Mainnet"}
-                    </span>
-                  </div>
-                </div>
+                  </button>
 
-                {/* Balance Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                  <div className="bg-muted/50 rounded-xl p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-8 h-8 bg-muted rounded-lg flex items-center justify-center">
-                        <span className="text-xs font-mono">0x</span>
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-sm">Wallet Address</h4>
-                        <p className="font-mono text-xs text-muted-foreground truncate max-w-[200px]">{address}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-muted/50 rounded-xl p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-8 h-8 bg-yellow-100 rounded-lg flex items-center justify-center">
-                        <span className="text-xs font-bold text-yellow-700">$</span>
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-sm">USDFC Balance</h4>
-                        <p className={`font-bold ${
-                          isLoadingBalances 
-                            ? "text-muted-foreground" 
-                            : parseFloat(balances.usdfc) >= 5 
-                              ? "text-green-600" 
-                              : "text-red-600"
-                        }`}>
-                          {isLoadingBalances ? "Loading..." : `${parseFloat(balances.usdfc).toFixed(2)} USDFC`}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-muted/50 rounded-xl p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <span className="text-xs font-bold text-blue-700">F</span>
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-sm">{filTokenName} Balance</h4>
-                        <p className="font-bold text-foreground">
-                          {isLoadingBalances ? "Loading..." : `${parseFloat(balances.fil).toFixed(4)} ${filTokenName}`}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              
-              {/* Synapse Storage Metrics */}
-              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <h4 className="text-sm font-semibold text-blue-800 mb-2">📊 Synapse Storage Status</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                  <div>
-                    <span className="font-medium text-blue-700">Contract Balance:</span>
-                    <p className="font-medium text-blue-900">
-                      {synapseBalances.warmStorageBalanceFormatted.toFixed(2)} USDFC
-                    </p>
-                  </div>
-                  <div>
-                    <span className="font-medium text-blue-700">Storage Usage:</span>
-                    <p className="font-medium text-blue-900">
-                      {synapseBalances.currentStorageGB.toFixed(2)} GB
-                    </p>
-                  </div>
-                  <div>
-                    <span className="font-medium text-blue-700">Persistence:</span>
-                    <p className="font-medium text-blue-900">
-                      {synapseBalances.persistenceDaysLeft < 0.01 
-                        ? `${(synapseBalances.persistenceDaysLeft * 24 * 60).toFixed(1)} minutes`
-                        : synapseBalances.persistenceDaysLeft < 1 
-                        ? `${(synapseBalances.persistenceDaysLeft * 24).toFixed(1)} hours`
-                        : `${synapseBalances.persistenceDaysLeft.toFixed(1)} days`} remaining
-                    </p>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Storage Persistence Calculation Table */}
-              <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                <h4 className="text-sm font-semibold text-green-800 mb-2">🕒 Storage Duration Calculator</h4>
-                <div className="text-xs text-green-700 mb-3">
-                  Based on your current lockup allowance of {(Number(synapseBalances.currentLockupAllowance) / 1e6).toFixed(2)} USDFC
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs border-collapse">
-                    <thead>
-                      <tr className="border-b border-green-300">
-                        <th className="text-left py-1 px-2 font-medium text-green-800">Size</th>
-                        <th className="text-left py-1 px-2 font-medium text-green-800">Duration</th>
-                        <th className="text-left py-1 px-2 font-medium text-green-800">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[0.001, 0.01, 0.1, 0.5, 1, 5, 10].map((sizeGB) => {
-                        // Calculate persistence time for this storage size
-                        const estimatedRateForSize = Number(synapseBalances.rateNeeded) * (sizeGB / 10); // Assuming rateNeeded is for 10GB
-                        const epochsPerDay = 2880; // Filecoin epochs per day
-                        const lockupPerDay = epochsPerDay * estimatedRateForSize;
-                        const daysForSize = lockupPerDay > 0 
-                          ? Number(synapseBalances.currentLockupAllowance) / 1e6 / (lockupPerDay / 1e6)
-                          : Infinity;
-                        
-                        const formatDuration = (days: number) => {
-                          if (days === Infinity) return "∞";
-                          if (days < 0.01) return `${(days * 24 * 60).toFixed(1)} min`;
-                          if (days < 1) return `${(days * 24).toFixed(1)} hrs`;
-                          if (days < 365) return `${days.toFixed(1)} days`;
-                          return `${(days / 365).toFixed(1)} years`;
-                        };
-                        
-                        const getStatus = (days: number) => {
-                          if (days === Infinity) return { text: "Free", color: "text-green-600" };
-                          if (days > 30) return { text: "Good", color: "text-green-600" };
-                          if (days > 7) return { text: "OK", color: "text-yellow-600" };
-                          return { text: "Low", color: "text-red-600" };
-                        };
-                        
-                        const status = getStatus(daysForSize);
-                        
-                        return (
-                          <tr key={sizeGB} className="border-b border-green-200">
-                            <td className="py-1 px-2 text-green-900">{sizeGB} GB</td>
-                            <td className="py-1 px-2 text-green-900">{formatDuration(daysForSize)}</td>
-                            <td className={`py-1 px-2 font-medium ${status.color}`}>{status.text}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="mt-2 text-xs text-green-700">
-                  * Estimates based on current Synapse storage rates and your lockup allowance
-                </div>
-              </div>
-              
-              {(parseFloat(balances.usdfc) < 5 || parseFloat(balances.fil) < 0.1) && !isLoadingBalances && (
-                <div className="mt-3 space-y-2">
-                  {parseFloat(balances.usdfc) < 5 && (
-                    <div className="p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
-                      ⚠️ You need at least 5 USDFC for storage. Get test tokens: <a href="https://forest-explorer.chainsafe.dev/faucet/calibnet_usdfc" target="_blank" className="underline">USDFC Faucet</a>
+                  {expandedSections.sections && (
+                    <div className="px-4 pb-4 space-y-3 border-t border-gray-200 dark:border-gray-600 pt-4">
+                      {[
+                        { key: 'hero', icon: Building, name: 'Hero Section', desc: 'Main headline and call-to-action' },
+                        { key: 'features', icon: Star, name: 'Features', desc: 'Highlight key features' },
+                        { key: 'testimonials', icon: MessageSquare, name: 'Testimonials', desc: 'Customer reviews and quotes' },
+                        { key: 'about', icon: Users, name: 'About Us', desc: 'Company story and mission' },
+                        { key: 'pricing', icon: BarChart3, name: 'Pricing', desc: 'Plans and pricing options' },
+                        { key: 'contact', icon: Mail, name: 'Contact', desc: 'Contact form and information' },
+                        { key: 'stats', icon: BarChart3, name: 'Statistics', desc: 'Key numbers and metrics' },
+                        { key: 'team', icon: Award, name: 'Team', desc: 'Meet the team members' },
+                      ].map(({ key, icon: Icon, name, desc }) => (
+                        <label key={key} className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedSections[key as keyof typeof selectedSections]}
+                            onChange={(e) => setSelectedSections(prev => ({ ...prev, [key]: e.target.checked }))}
+                            className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                          />
+                          <Icon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                          <div>
+                            <div className="font-medium text-gray-900 dark:text-gray-100">{name}</div>
+                            <div className="text-sm text-gray-600 dark:text-gray-400">{desc}</div>
+                          </div>
+                        </label>
+                      ))}
                     </div>
                   )}
-                  {parseFloat(balances.fil) < 0.1 && (
-                    <div className="p-2 bg-red-50 border border-red-200 rounded text-sm text-red-800">
-                      🚨 You need at least 0.1 {filTokenName} for gas fees. Get test tokens: <a href={filFaucetUrl} target="_blank" className="underline">{filTokenName} Faucet</a>
+                </div>
+
+                {/* Theme & Branding */}
+                <div className="border border-gray-200 dark:border-gray-600 rounded-xl">
+                  <button
+                    onClick={() => setExpandedSections(prev => ({ ...prev, theme: !prev.theme }))}
+                    className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Palette className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                      <div>
+                        <h4 className="font-semibold text-gray-900 dark:text-gray-100">Theme & Branding</h4>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Colors, fonts, and visual style</p>
+                      </div>
+                    </div>
+                    {expandedSections.theme ? (
+                      <ChevronDown className="w-5 h-5 text-gray-400" />
+                    ) : (
+                      <ChevronRight className="w-5 h-5 text-gray-400" />
+                    )}
+                  </button>
+
+                  {expandedSections.theme && (
+                    <div className="px-4 pb-4 space-y-4 border-t border-gray-200 dark:border-gray-600 pt-4">
+                      {/* Color Palette Selection */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">Color Palette</label>
+                        <div className="grid grid-cols-2 gap-3">
+                          {COLOR_PALETTES.map((palette) => (
+                            <button
+                              key={palette.id}
+                              onClick={() => setTheme(prev => ({ ...prev, palette: palette.id as any }))}
+                              className={`p-3 rounded-lg border-2 transition-all ${
+                                theme.palette === palette.id
+                                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                                  : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 mb-2">
+                                <div className="flex gap-1">
+                                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: palette.primary }}></div>
+                                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: palette.secondary }}></div>
+                                </div>
+                              </div>
+                              <div className="text-xs font-medium text-gray-900 dark:text-gray-100">{palette.name}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Font Selection */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">Typography</label>
+                        <div className="space-y-2">
+                          {FONT_OPTIONS.map((font) => (
+                            <button
+                              key={font.id}
+                              onClick={() => setTheme(prev => ({ ...prev, font: font.id as any }))}
+                              className={`w-full p-3 rounded-lg border-2 text-left transition-all ${
+                                theme.font === font.id
+                                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                                  : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                              }`}
+                            >
+                              <div className="font-medium text-gray-900 dark:text-gray-100" style={{ fontFamily: font.family }}>
+                                {font.name}
+                              </div>
+                              <div className="text-xs text-gray-600 dark:text-gray-400">{font.preview}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   )}
+                </div>
+
+                {/* Animations */}
+                <div className="border border-gray-200 dark:border-gray-600 rounded-xl">
+                  <button
+                    onClick={() => setExpandedSections(prev => ({ ...prev, animations: !prev.animations }))}
+                    className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Zap className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                      <div>
+                        <h4 className="font-semibold text-gray-900 dark:text-gray-100">Animations</h4>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Motion and interaction effects</p>
+                      </div>
+                    </div>
+                    {expandedSections.animations ? (
+                      <ChevronDown className="w-5 h-5 text-gray-400" />
+                    ) : (
+                      <ChevronRight className="w-5 h-5 text-gray-400" />
+                    )}
+                  </button>
+
+                  {expandedSections.animations && (
+                    <div className="px-4 pb-4 space-y-4 border-t border-gray-200 dark:border-gray-600 pt-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">Global Animation Style</label>
+                        <div className="space-y-2">
+                          {ANIMATION_OPTIONS.map((animation) => (
+                            <button
+                              key={animation.id}
+                              onClick={() => setAnimations(prev => ({ ...prev, global: animation.id as any }))}
+                              className={`w-full p-3 rounded-lg border-2 text-left transition-all ${
+                                animations.global === animation.id
+                                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                                  : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                              }`}
+                            >
+                              <div className="font-medium text-gray-900 dark:text-gray-100">{animation.name}</div>
+                              <div className="text-xs text-gray-600 dark:text-gray-400">{animation.description}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Features */}
+                <div className="border border-gray-200 dark:border-gray-600 rounded-xl">
+                  <button
+                    onClick={() => setExpandedSections(prev => ({ ...prev, features: !prev.features }))}
+                    className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <ToggleLeft className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                      <div>
+                        <h4 className="font-semibold text-gray-900 dark:text-gray-100">Features</h4>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Interactive functionality</p>
+                      </div>
+                    </div>
+                    {expandedSections.features ? (
+                      <ChevronDown className="w-5 h-5 text-gray-400" />
+                    ) : (
+                      <ChevronRight className="w-5 h-5 text-gray-400" />
+                    )}
+                  </button>
+
+                  {expandedSections.features && (
+                    <div className="px-4 pb-4 space-y-3 border-t border-gray-200 dark:border-gray-600 pt-4">
+                      {FEATURE_OPTIONS.map((feature) => (
+                        <label key={feature.id} className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={features[feature.id as keyof typeof features]}
+                            onChange={(e) => setFeatures(prev => ({ ...prev, [feature.id]: e.target.checked }))}
+                            className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 mt-0.5"
+                          />
+                          <div>
+                            <div className="font-medium text-gray-900 dark:text-gray-100">{feature.name}</div>
+                            <div className="text-sm text-gray-600 dark:text-gray-400">{feature.description}</div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Generate Button */}
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleBuildPreview}
+                disabled={!prompt.trim() || isUploading || isGenerating}
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all mb-6"
+              >
+                {isGenerating ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : isUploading ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Wand2 className="w-5 h-5" />
+                )}
+                {isGenerating ? "Generating..." : isUploading ? "Uploading..." : "Generate Landing Page"}
+              </motion.button>
+
+              {/* Upload Requirements Checklist */}
+              {htmlContent && (
+                <div className="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl">
+                  <div className="flex items-center gap-2 mb-4">
+                    <CheckCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    <h4 className="font-semibold text-gray-900 dark:text-gray-100">Upload Requirements</h4>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      {checklistStatus.walletConnected ? (
+                        <CheckCircle className="w-4 h-4 text-green-500" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-red-500" />
+                      )}
+                      <span className="text-gray-700 dark:text-gray-300">Wallet Connected</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {checklistStatus.onCalibration ? (
+                        <CheckCircle className="w-4 h-4 text-green-500" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-red-500" />
+                      )}
+                      <span className="text-gray-700 dark:text-gray-300">Calibration Network</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {checklistStatus.hasEnoughFil ? (
+                        <CheckCircle className="w-4 h-4 text-green-500" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-red-500" />
+                      )}
+                      <span className="text-gray-700 dark:text-gray-300">{filTokenName} for Gas</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {checklistStatus.hasEnoughUsdfc ? (
+                        <CheckCircle className="w-4 h-4 text-green-500" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-red-500" />
+                      )}
+                      <span className="text-gray-700 dark:text-gray-300">USDFC Deposited</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {checklistStatus.warmStorageApproved ? (
+                        <CheckCircle className="w-4 h-4 text-green-500" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-red-500" />
+                      )}
+                      <span className="text-gray-700 dark:text-gray-300">Storage Approved</span>
+                    </div>
+                  </div>
                 </div>
               )}
-              </motion.div>
-              
-              {/* Main Content Area */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Left Panel - Website Builder */}
-                <motion.div variants={fadeInUp} className="bg-card rounded-2xl p-6 shadow-lg border">
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-                      <Globe className="w-5 h-5 text-primary" />
+            </div>
+          </div>
+
+          {/* Preview Panel */}
+          <div className="flex-1 bg-gray-50 dark:bg-gray-900 overflow-hidden">
+            <div className="h-full flex flex-col">
+              {/* Preview Header with Tabs */}
+              <div className="bg-white dark:bg-dark-surface border-b border-gray-200 dark:border-gray-600">
+                <div className="p-6 pb-0">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
+                      <Eye className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div>
-                      <h3 className="text-xl font-semibold">Website Builder</h3>
-                      <p className="text-sm text-muted-foreground">Describe your website and we&apos;ll generate it</p>
+                      <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Preview & Configuration</h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">View your generated content and AI prompt</p>
                     </div>
                   </div>
+                </div>
 
-                  <div className="space-y-4">
-                    <div>
-                      <label htmlFor="prompt" className="block text-sm font-semibold mb-3">
-                        Website Description
-                      </label>
-                      <textarea
-                        id="prompt"
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        placeholder="Describe your website content here... Be specific about the design, content, and functionality you want."
-                        className="w-full h-32 p-4 border rounded-xl resize-none focus:ring-2 focus:ring-primary focus:border-transparent bg-background"
-                        disabled={isUploading}
-                      />
-                    </div>
+                {/* Tab Navigation */}
+                <div className="flex border-b border-gray-200 dark:border-gray-600">
+                  <button
+                    onClick={() => setActiveTab('preview')}
+                    className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                      activeTab === 'preview'
+                        ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                  >
+                    <Eye className="w-4 h-4" />
+                    Live Preview
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('prompt')}
+                    className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                      activeTab === 'prompt'
+                        ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                  >
+                    <FileText className="w-4 h-4" />
+                    AI Prompt
+                  </button>
+                </div>
+              </div>
 
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={handleBuildPreview}
-                      disabled={!prompt.trim() || isUploading}
-                      className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-xl font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                    >
-                      {isUploading ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                      ) : (
-                        <Globe className="w-5 h-5" />
-                      )}
-                      {isUploading ? "Generating..." : "Generate Website"}
-                    </motion.button>
-                  </div>
-
-                  {/* Upload Checklist */}
-                  {htmlContent && (
-                    <div className="mt-6 p-4 bg-secondary/30 border rounded-xl">
-                      <div className="flex items-center gap-2 mb-4">
-                        <CheckCircle className="w-5 h-5 text-primary" />
-                        <h4 className="font-semibold">Upload Requirements</h4>
-                      </div>
-                      <div className="space-y-3">
-                        {/* Wallet Connected */}
-                        <div className="flex items-center justify-between p-3 bg-background rounded-lg border">
-                          <div className="flex items-center gap-3">
-                            {checklistStatus.walletConnected ? (
-                              <CheckCircle className="w-5 h-5 text-green-500" />
-                            ) : (
-                              <XCircle className="w-5 h-5 text-red-500" />
-                            )}
-                            <span className="text-sm font-medium">Wallet Connected</span>
-                          </div>
-                          {!checklistStatus.walletConnected && (
-                            <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full">
-                              Required
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Network Check */}
-                        <div className="flex items-center justify-between p-3 bg-background rounded-lg border">
-                          <div className="flex items-center gap-3">
-                            {checklistStatus.onCalibration ? (
-                              <CheckCircle className="w-5 h-5 text-green-500" />
-                            ) : (
-                              <XCircle className="w-5 h-5 text-red-500" />
-                            )}
-                            <span className="text-sm font-medium">Filecoin Calibration Network</span>
-                          </div>
-                          {!checklistStatus.onCalibration && isConnected && (
-                            <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full">
-                              Switch Network
-                            </span>
-                          )}
-                        </div>
-
-                        {/* FIL Balance */}
-                        <div className="flex items-center justify-between p-3 bg-background rounded-lg border">
-                          <div className="flex items-center gap-3">
-                            {checklistStatus.hasEnoughFil ? (
-                              <CheckCircle className="w-5 h-5 text-green-500" />
-                            ) : (
-                              <XCircle className="w-5 h-5 text-red-500" />
-                            )}
-                            <span className="text-sm font-medium">{filTokenName} for Gas (≥0.1)</span>
-                          </div>
-                          {!checklistStatus.hasEnoughFil && isConnected && (
-                            <a 
-                              href={filFaucetUrl} 
-                              target="_blank" 
-                              className="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full hover:bg-blue-200 transition-colors"
-                            >
-                              Get {filTokenName}
-                            </a>
-                          )}
-                        </div>
-
-                        {/* USDFC Deposit */}
-                        <div className="flex items-center justify-between p-3 bg-background rounded-lg border">
-                          <div className="flex items-center gap-3">
-                            {checklistStatus.hasEnoughUsdfc ? (
-                              <CheckCircle className="w-5 h-5 text-green-500" />
-                            ) : (
-                              <XCircle className="w-5 h-5 text-red-500" />
-                            )}
-                            <span className="text-sm font-medium">USDFC Deposited (≥5)</span>
-                          </div>
-                          {!checklistStatus.hasEnoughUsdfc && isConnected && (
-                            <motion.button
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
-                              onClick={handleFixUSDFC}
-                              disabled={isFixing === "usdfc"}
-                              className="text-xs bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full hover:bg-yellow-200 disabled:opacity-50 transition-colors"
-                            >
-                              {isFixing === "usdfc" ? (
-                                <div className="flex items-center gap-1">
-                                  <Loader2 className="w-3 h-3 animate-spin" />
-                                  Depositing...
-                                </div>
-                              ) : (
-                                "Deposit USDFC"
-                              )}
-                            </motion.button>
-                          )}
-                        </div>
-
-                        {/* Warm Storage Approval */}
-                        <div className="flex items-center justify-between p-3 bg-background rounded-lg border">
-                          <div className="flex items-center gap-3">
-                            {checklistStatus.warmStorageApproved ? (
-                              <CheckCircle className="w-5 h-5 text-green-500" />
-                            ) : (
-                              <XCircle className="w-5 h-5 text-red-500" />
-                            )}
-                            <span className="text-sm font-medium">Warm Storage Approved</span>
-                          </div>
-                          {!checklistStatus.warmStorageApproved && isConnected && (
-                            <motion.button
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
-                              onClick={handleFixWarmStorage}
-                              disabled={isFixing === "warmstorage"}
-                              className="text-xs bg-orange-100 text-orange-700 px-3 py-1 rounded-full hover:bg-orange-200 disabled:opacity-50 transition-colors"
-                            >
-                              {isFixing === "warmstorage" ? (
-                                <div className="flex items-center gap-1">
-                                  <Loader2 className="w-3 h-3 animate-spin" />
-                                  Approving...
-                                </div>
-                              ) : (
-                                "Approve Storage"
-                              )}
-                            </motion.button>
-                          )}
-                        </div>
-
-                        {/* Ready Status */}
-                        <div className={`p-3 rounded-lg border-2 ${
-                          isReadyToUpload 
-                            ? "bg-green-50 border-green-200" 
-                            : "bg-yellow-50 border-yellow-200"
-                        }`}>
-                          <div className="flex items-center gap-3">
-                            {isReadyToUpload ? (
-                              <CheckCircle className="w-5 h-5 text-green-500" />
-                            ) : (
-                              <AlertCircle className="w-5 h-5 text-yellow-500" />
-                            )}
-                            <span className={`text-sm font-semibold ${
-                              isReadyToUpload ? "text-green-700" : "text-yellow-700"
-                            }`}>
-                              {isReadyToUpload ? "Ready to Deploy!" : "Setup Required"}
-                              {isCheckingStatus && " (checking...)"}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </motion.div>
-
-                {/* Right Panel - Preview */}
-                <motion.div variants={fadeInUp} className="bg-card rounded-2xl p-6 shadow-lg border">
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-                      <Globe className="w-5 h-5 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-semibold">Live Preview</h3>
-                      <p className="text-sm text-muted-foreground">See your website as it will appear</p>
-                    </div>
-                  </div>
-                  
-                  <div className="border rounded-xl overflow-hidden h-96 bg-muted/20">
-                    {htmlContent ? (
+              {/* Tab Content */}
+              <div className="flex-1 p-6">
+                <div className="h-full border border-gray-200 dark:border-gray-600 rounded-xl overflow-hidden bg-white dark:bg-gray-800">
+                  {activeTab === 'preview' ? (
+                    // Live Preview Tab
+                    htmlContent ? (
                       <iframe
                         srcDoc={htmlContent}
                         className="w-full h-full"
@@ -979,174 +1113,157 @@ export default function SiteGenPage() {
                         sandbox="allow-same-origin"
                       />
                     ) : (
-                      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                        <Globe className="w-16 h-16 mb-4 opacity-50" />
+                      <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                        <Wand2 className="w-16 h-16 mb-4 opacity-50" />
                         <p className="text-lg font-medium">No Preview Yet</p>
-                        <p className="text-sm">Generate your website to see a preview</p>
+                        <p className="text-sm">Configure your sections and generate your landing page</p>
                       </div>
-                    )}
-                  </div>
-
-                  {/* Deployment Actions */}
-                  {htmlContent && (
-                    <div className="mt-6 space-y-4">
-                      <div className="flex gap-3">
-                        <motion.button
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={handleStoreWithSynapse}
-                          disabled={!htmlContent || isUploading || !!uploadedPieceCid || !isReadyToUpload}
-                          className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                        >
-                          {isUploading ? (
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                          ) : uploadedPieceCid ? (
-                            <CheckCircle className="w-5 h-5" />
-                          ) : (
-                            <Upload className="w-5 h-5" />
-                          )}
-                          {isUploading ? "Deploying..." : uploadedPieceCid ? "Deployed!" : "Deploy to Filecoin"}
-                        </motion.button>
-                        
-                        <motion.button
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={handleDownloadZip}
-                          disabled={!htmlContent || isUploading}
-                          className="flex items-center justify-center gap-2 px-4 py-3 bg-secondary text-secondary-foreground rounded-xl font-semibold hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                        >
-                          <Download className="w-5 h-5" />
-                          ZIP
-                        </motion.button>
-                      </div>
-
-                      {/* Publish to WarmWeb Button - appears after successful deployment */}
-                      {uploadedPieceCid && !publishedSite && (
-                        <motion.button
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={handlePublishToWarmWeb}
-                          disabled={isPublishing}
-                          className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.3 }}
-                        >
-                          {isPublishing ? (
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                          ) : (
-                            <Globe className="w-5 h-5" />
-                          )}
-                          {isPublishing ? "Publishing..." : "Publish to WarmWeb"}
-                        </motion.button>
-                      )}
-
-                      {/* Published URL Display */}
-                      {publishedSite && (
-                        <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
-                          <div className="flex items-center gap-2 mb-2">
-                            <CheckCircle className="w-5 h-5 text-blue-600" />
-                            <h4 className="font-semibold text-blue-800">Published to WarmWeb!</h4>
+                    )
+                  ) : (
+                    // AI Prompt Tab
+                    <div className="h-full flex flex-col">
+                      {generatedPrompt ? (
+                        <div className="h-full flex flex-col">
+                          {/* Prompt Header */}
+                          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50">
+                            <div className="flex items-center gap-2">
+                              <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                              <h4 className="font-semibold text-gray-900 dark:text-gray-100">Generated AI Prompt</h4>
+                            </div>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(generatedPrompt);
+                                // You could add a toast notification here
+                              }}
+                              className="flex items-center gap-2 px-3 py-1 text-sm bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                            >
+                              <Copy className="w-4 h-4" />
+                              Copy
+                            </button>
                           </div>
-                          <div className="text-sm text-blue-700 space-y-1">
-                            <div>
-                              <span className="font-medium">Live URL:</span>
-                              <a
-                                href={publishedSite.accessUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="ml-2 text-blue-600 hover:text-blue-800 underline"
-                              >
-                                {publishedSite.accessUrl}
-                              </a>
-                            </div>
-                            <div>
-                              <span className="font-medium">Production URL:</span>
-                              <a
-                                href={publishedSite.productionUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="ml-2 text-blue-600 hover:text-blue-800 underline"
-                              >
-                                {publishedSite.productionUrl}
-                              </a>
-                            </div>
-                            <div>
-                              <span className="font-medium">Subdomain:</span>
-                              <span className="ml-2 font-mono text-blue-900">{publishedSite.subdomain}</span>
-                            </div>
+
+                          {/* Prompt Content */}
+                          <div className="flex-1 p-4 overflow-y-auto">
+                            <pre className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap font-mono leading-relaxed">
+                              {generatedPrompt}
+                            </pre>
                           </div>
                         </div>
-                      )}
-
-                      {publishError && (
-                        <div className="p-3 rounded-lg bg-red-50 border border-red-200">
-                          <p className="text-sm text-red-700">
-                            ❌ Publish failed: {publishError.message}
-                          </p>
-                        </div>
-                      )}
-
-                      {uploadedPieceCid && (
-                        <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
-                          <div className="flex items-center gap-2 mb-2">
-                            <CheckCircle className="w-5 h-5 text-green-600" />
-                            <h4 className="font-semibold text-green-800">Successfully Deployed!</h4>
-                          </div>
-                          <div className="text-sm text-green-700 space-y-1">
-                            <div><span className="font-medium">Files:</span> {fileList.join(", ")}</div>
-                            <div><span className="font-medium">Size:</span> {zipSize.toLocaleString()} bytes</div>
-                            <div className="break-all"><span className="font-medium">Piece CID:</span> {uploadedPieceCid}</div>
-                          </div>
-                        </div>
-                      )}
-
-                      {uploadStatus && (
-                        <div className="p-3 rounded-lg bg-muted/50">
-                          <p className={`text-sm ${
-                            uploadStatus.includes("❌") ? "text-red-500" :
-                            uploadStatus.includes("✅") || uploadStatus.includes("🎉") ? "text-green-500" :
-                            "text-muted-foreground"
-                          }`}>
-                            {uploadStatus}
-                          </p>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                          <FileText className="w-16 h-16 mb-4 opacity-50" />
+                          <p className="text-lg font-medium">No AI Prompt Yet</p>
+                          <p className="text-sm text-center">Generate your landing page to see the AI prompt<br />that was used to create it</p>
                         </div>
                       )}
                     </div>
                   )}
-                </motion.div>
+                </div>
               </div>
 
-              {/* Simple Deposit Section - moved outside grid */}
-              {htmlContent && !uploadedPieceCid && parseFloat(balances.usdfc) < 10 && (
-                <motion.div variants={fadeInUp} className="mt-8 p-6 bg-card rounded-2xl border shadow-lg">
-                  <h4 className="font-semibold mb-3 text-blue-800">💰 Add Storage Balance</h4>
-                  <div className="text-sm text-blue-700 mb-3">
-                    Deposit USDFC to extend your storage persistence
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-sm">
-                      <span className="text-blue-700">Current Balance:</span>
-                      <span className="ml-2 font-medium text-blue-900">{parseFloat(balances.usdfc).toFixed(2)} USDFC</span>
-                    </div>
+              {/* Action Buttons */}
+              {htmlContent && (
+                <div className="bg-white dark:bg-dark-surface border-t border-gray-200 dark:border-gray-600 p-6">
+                  <div className="flex gap-3">
                     <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={handleSimpleDeposit}
-                      disabled={isUploading || durationAction?.type === 'deposit'}
-                      className="px-4 py-2 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={handleStoreWithSynapse}
+                      disabled={!htmlContent || isUploading || !!uploadedPieceCid || !isReadyToUpload}
+                      className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                     >
-                      {durationAction?.type === 'deposit'
-                        ? "Depositing..."
-                        : "Deposit 10 USDFC"}
+                      {isUploading ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : uploadedPieceCid ? (
+                        <CheckCircle className="w-5 h-5" />
+                      ) : (
+                        <Upload className="w-5 h-5" />
+                      )}
+                      {isUploading ? "Deploying..." : uploadedPieceCid ? "Deployed!" : "Deploy to Filecoin"}
+                    </motion.button>
+
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={handleDownloadZip}
+                      disabled={!htmlContent || isUploading}
+                      className="flex items-center justify-center gap-2 px-4 py-3 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-xl font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      <Download className="w-5 h-5" />
+                      ZIP
                     </motion.button>
                   </div>
-                </motion.div>
+
+                  {/* Publish to WarmWeb Button */}
+                  {uploadedPieceCid && !publishedSite && (
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={handlePublishToWarmWeb}
+                      disabled={isPublishing}
+                      className="w-full mt-3 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      {isPublishing ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <Globe className="w-5 h-5" />
+                      )}
+                      {isPublishing ? "Publishing..." : "Publish to WarmWeb"}
+                    </motion.button>
+                  )}
+
+                  {/* Status Messages */}
+                  {uploadStatus && (
+                    <div className="mt-3 p-3 rounded-lg bg-gray-100 dark:bg-gray-800">
+                      <p className={`text-sm ${
+                        uploadStatus.includes("❌") ? "text-red-500" :
+                        uploadStatus.includes("✅") || uploadStatus.includes("🎉") ? "text-green-500" :
+                        "text-gray-600 dark:text-gray-400"
+                      }`}>
+                        {uploadStatus}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Published URL Display */}
+                  {publishedSite && (
+                    <div className="mt-3 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl">
+                      <div className="flex items-center gap-2 mb-2">
+                        <CheckCircle className="w-5 h-5 text-blue-600" />
+                        <h4 className="font-semibold text-blue-800 dark:text-blue-300">Published to WarmWeb!</h4>
+                      </div>
+                      <div className="text-sm text-blue-700 dark:text-blue-400 space-y-1">
+                        <div>
+                          <span className="font-medium">Live URL:</span>
+                          <a
+                            href={publishedSite.accessUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="ml-2 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline"
+                          >
+                            {publishedSite.accessUrl}
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {publishError && (
+                    <div className="mt-3 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700">
+                      <p className="text-sm text-red-700 dark:text-red-400">
+                        ❌ Publish failed: {publishError.message}
+                      </p>
+                    </div>
+                  )}
+                </div>
               )}
-            </>
-          )}
-        </motion.div>
-      </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
