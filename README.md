@@ -23,8 +23,8 @@ WarmWeb demonstrates:
 
 1. Clone this repository:
 ```bash
-git clone https://github.com/warmweb/warmweb-upload-dapp
-cd warmweb-upload-dapp
+git clone https://github.com/warmweb/warmweb-upload-dapp-try2.git
+cd warmweb-upload-dapp-try2
 ```
 
 2. Install dependencies:
