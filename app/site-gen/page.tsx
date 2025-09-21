@@ -11,6 +11,7 @@ import { usePublishSite } from "@/hooks/usePublishSite";
 import { ArrowLeft, Download, Upload, Globe, Loader2, CheckCircle, XCircle, AlertCircle, Wand2, Eye, Sparkles, Settings, Users, Star, MessageSquare, Building, Award, Mail, BarChart3, FileText, Copy, Palette, Zap, ToggleLeft, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { AILandingPageGenerator } from "@/lib/aiLandingPageGenerator";
+import { StorageManager } from "@/components/StorageManager";
 
 const fadeInUp = {
   hidden: { opacity: 0, y: 20 },
@@ -114,13 +115,30 @@ export default function SiteGenPage() {
     animations: false,
     features: false
   });
-  const [activeTab, setActiveTab] = useState<'preview' | 'prompt'>('preview');
+  const [activeTab, setActiveTab] = useState<'preview' | 'prompt' | 'storage'>('preview');
   const [generatedPrompt, setGeneratedPrompt] = useState('');
   const { isConnected, address, chainId } = useAccount();
   const { disconnect } = useDisconnect();
 
   // Check if we're in development mode
   const isDev = process.env.NODE_ENV === 'development';
+
+  // Helper function to clean up URLs in production (remove port numbers)
+  const cleanProductionUrl = (url: string): string => {
+    if (isDev) return url; // Keep original URL in development
+
+    try {
+      const urlObj = new URL(url);
+      // Remove port in production if it's a standard port or development port
+      if (urlObj.port && (urlObj.port === '3000' || urlObj.port === '8080' || urlObj.port === '80' || urlObj.port === '443')) {
+        urlObj.port = '';
+      }
+      return urlObj.toString();
+    } catch {
+      // If URL parsing fails, return original
+      return url;
+    }
+  };
 
   const { getZipBytes, fileList } = useSiteZip(htmlContent);
   const { 
@@ -222,11 +240,22 @@ export default function SiteGenPage() {
   };
 
   // Check requirements when connected or when HTML content changes
+  // Also defer this to allow balance loading to complete first
   useEffect(() => {
     if (isConnected && htmlContent) {
-      checkUploadRequirements();
+      // Defer requirements check by 3 seconds to allow balance loading (2s) + buffer
+      setTimeout(() => {
+        checkUploadRequirements();
+      }, 3000);
     }
   }, [isConnected, chainId, htmlContent]);
+
+  // Also check requirements when balances are updated
+  useEffect(() => {
+    if (isConnected && htmlContent && balances && !isLoadingBalances) {
+      checkUploadRequirements();
+    }
+  }, [balances, isLoadingBalances]);
 
   // Collect debug information
   const updateDebugInfo = async () => {
@@ -294,48 +323,181 @@ export default function SiteGenPage() {
         .map(([feature, _]) => FEATURE_OPTIONS.find(f => f.id === feature)?.name)
         .filter(Boolean);
 
-      const aiPrompt = `Create a professional landing page for: ${userPrompt}
+      const aiPrompt = `You are an expert web designer creating a professional landing page. Generate a complete, production-ready HTML page for: ${userPrompt}
 
-SECTIONS TO INCLUDE:
-${selectedSectionsList.map(section => `- ${section.charAt(0).toUpperCase() + section.slice(1)}`).join('\n')}
+## DESIGN SYSTEM & BRAND IDENTITY
 
-THEME & BRANDING:
-- Color Palette: ${selectedPalette?.name} (Primary: ${selectedPalette?.primary}, Secondary: ${selectedPalette?.secondary})
-- Typography: ${selectedFont?.name} (${selectedFont?.family})
-- Style: ${selectedFont?.preview}
+**Color Palette:** ${selectedPalette?.name}
+- Primary: ${selectedPalette?.primary} (CTAs, links, accents)
+- Secondary: ${selectedPalette?.secondary} (supporting elements, borders)
+- Accent: ${selectedPalette?.accent} (highlights, hover states)
+- Use neutral grays: #f8fafc, #e2e8f0, #64748b, #1e293b for backgrounds and text
+- Ensure WCAG AA contrast compliance
 
-ANIMATIONS:
-- Global Animation: ${selectedAnimation?.name} - ${selectedAnimation?.description}
-- Apply consistent ${animations.global} animations throughout the page
+**Typography Hierarchy:**
+- Font Family: ${selectedFont?.family}
+- H1: 3.5rem/1.1 font-bold (hero headlines)
+- H2: 2.5rem/1.2 font-bold (section headers)
+- H3: 1.875rem/1.3 font-semibold (subsections)
+- Body: 1rem/1.6 font-normal (readable content)
+- Small: 0.875rem/1.5 font-medium (captions, labels)
 
-FEATURES TO IMPLEMENT:
+## LAYOUT & SECTIONS TO BUILD
+
+${selectedSectionsList.map(section => {
+  const sectionSpecs = {
+    hero: `**Hero Section:**
+- Full viewport height with centered content
+- Compelling headline (H1) + subheadline (H2)
+- Primary CTA button + secondary link
+- Hero image/illustration on right (desktop) or below (mobile)
+- Subtle background gradient or pattern`,
+    features: `**Features Section:**
+- 3-column grid (desktop) / 1-column (mobile)
+- Icon + title + description for each feature
+- Use consistent spacing and visual hierarchy
+- Subtle hover animations on feature cards`,
+    testimonials: `**Testimonials Section:**
+- Customer quotes in cards with photos
+- Star ratings and company logos
+- Carousel or grid layout
+- Social proof emphasis`,
+    about: `**About Section:**
+- Company story with mission/vision
+- Team photos or company values
+- Split layout with text + image`,
+    pricing: `**Pricing Section:**
+- Pricing cards with feature comparison
+- Popular plan highlighted
+- Clear CTA buttons for each tier`,
+    contact: `**Contact Section:**
+- Contact form with validation styling
+- Contact information and location
+- Map integration placeholder`,
+    stats: `**Statistics Section:**
+- Key metrics in large, bold numbers
+- Brief descriptions under each stat
+- Animated counters (CSS-based)`,
+    team: `**Team Section:**
+- Team member cards with photos
+- Names, roles, and brief bios
+- Social media links`
+  };
+  return sectionSpecs[section as keyof typeof sectionSpecs] || `- ${section.charAt(0).toUpperCase() + section.slice(1)}`;
+}).join('\n\n')}
+
+## MODERN UI PATTERNS & COMPONENTS
+
+**Navigation:**
+- Sticky header with logo + navigation links
+- Mobile hamburger menu with smooth transitions
+- Subtle shadow on scroll
+
+**Buttons & CTAs:**
+- Primary: ${selectedPalette?.primary} background, white text, rounded-lg, hover:scale-105
+- Secondary: border-2 border-current, transparent bg, hover:bg-current
+- Size: px-8 py-4 for primary CTAs, px-6 py-3 for secondary
+
+**Cards & Content:**
+- Rounded corners (rounded-xl = 12px)
+- Subtle shadows: shadow-lg for elevated elements
+- Padding: p-8 for cards, p-6 for smaller elements
+- Borders: border border-gray-200 for subtle separation
+
+**Spacing System:**
+- Section padding: py-24 (large sections), py-16 (medium sections)
+- Container: max-width-7xl mx-auto px-6
+- Grid gaps: gap-8 (cards), gap-12 (sections)
+
+## RESPONSIVE DESIGN REQUIREMENTS
+
+**Breakpoints:**
+- Mobile: < 640px (1 column layouts)
+- Tablet: 640px - 1024px (2 column layouts)
+- Desktop: > 1024px (3+ column layouts)
+
+**Mobile-First Approach:**
+- Base styles for mobile
+- Use min-width media queries for larger screens
+- Touch-friendly button sizes (min 44px)
+- Readable font sizes (min 16px body text)
+
+## ANIMATIONS & INTERACTIONS
+
+**${selectedAnimation?.name} Style:**
+- ${selectedAnimation?.description}
+- Scroll-triggered animations using CSS @keyframes
+- Smooth transitions: transition-all duration-300 ease-in-out
+- Hover effects: transform: translateY(-4px) for cards
+- Subtle parallax effects for background elements
+
+**Performance:**
+- Use transform and opacity for animations
+- Avoid animating layout properties
+- Add reduced-motion media query support
+
+## TECHNICAL IMPLEMENTATION
+
+**HTML Structure:**
+\`\`\`html
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Generated based on business]</title>
+  <meta name="description" content="[SEO description]">
+  <!-- Embedded CSS in <style> tag -->
+</head>
+<body>
+  <!-- Navigation -->
+  <!-- Hero -->
+  <!-- Sections as specified -->
+  <!-- Footer -->
+  <!-- Embedded JavaScript in <script> tag -->
+</body>
+</html>
+\`\`\`
+
+**CSS Framework Approach:**
+- Use utility-first CSS similar to Tailwind
+- Create reusable component classes
+- Implement CSS Grid and Flexbox for layouts
+- Include CSS custom properties for theming
+
+**JavaScript Features:**
 ${enabledFeatures.map(feature => `- ${feature}`).join('\n')}
+- Smooth scrolling navigation
+- Mobile menu toggle
+- Form validation (if contact form included)
+- Scroll animations using Intersection Observer
 
-TECHNICAL REQUIREMENTS:
-- Modern, clean design with professional styling
-- Responsive layout that works on all devices
-- Clear call-to-action buttons using the specified color palette
-- Consistent typography using ${selectedFont?.family}
-- High-quality placeholder images where appropriate
-- SEO-friendly structure with proper meta tags
-- Fast loading and optimized code
-- Accessibility features (ARIA labels, proper contrast)
+## CONTENT GUIDELINES
 
-DESIGN SPECIFICATIONS:
-- Use the ${selectedPalette?.name} color scheme throughout
-- Primary color: ${selectedPalette?.primary} for main CTAs and accents
-- Secondary color: ${selectedPalette?.secondary} for supporting elements
-- Typography: ${selectedFont?.family} for all text elements
-- Animation style: Implement ${selectedAnimation?.description} for page elements
-- Modern UI patterns with clean spacing and visual hierarchy
-- Professional business appearance suitable for ${userPrompt}
+**Tone & Messaging:**
+- Professional yet approachable
+- Industry-appropriate language for: ${userPrompt}
+- Clear value propositions
+- Action-oriented CTAs ("Get Started", "Learn More", "Contact Us")
 
-CODE STRUCTURE:
-- Single HTML file with embedded CSS and JavaScript
-- Mobile-first responsive design
-- Cross-browser compatible
-- Optimized for performance and loading speed
-`;
+**Placeholder Content:**
+- Use realistic placeholder text relevant to the business
+- Include proper image alt texts
+- Use actual company-style names and realistic metrics
+- Add proper meta descriptions and titles
+
+## FINAL OUTPUT REQUIREMENTS
+
+Generate a single, complete HTML file that:
+1. Is production-ready and pixel-perfect
+2. Works perfectly on mobile, tablet, and desktop
+3. Follows modern web standards and accessibility guidelines
+4. Includes smooth animations and interactions
+5. Has professional, business-appropriate design
+6. Loads fast with optimized CSS and minimal JavaScript
+7. Includes proper SEO meta tags and semantic HTML
+
+Make this landing page indistinguishable from a professionally designed website. Focus on visual polish, attention to detail, and user experience excellence.`;
 
       setGeneratedPrompt(aiPrompt);
 
@@ -1047,8 +1209,15 @@ CODE STRUCTURE:
               {htmlContent && (
                 <div className="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl">
                   <div className="flex items-center gap-2 mb-4">
-                    <CheckCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    {isCheckingStatus ? (
+                      <Loader2 className="w-5 h-5 text-blue-600 dark:text-blue-400 animate-spin" />
+                    ) : (
+                      <CheckCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    )}
                     <h4 className="font-semibold text-gray-900 dark:text-gray-100">Upload Requirements</h4>
+                    {isCheckingStatus && (
+                      <span className="text-xs text-blue-600 dark:text-blue-400">Checking...</span>
+                    )}
                   </div>
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center gap-2">
@@ -1059,6 +1228,7 @@ CODE STRUCTURE:
                       )}
                       <span className="text-gray-700 dark:text-gray-300">Wallet Connected</span>
                     </div>
+
                     <div className="flex items-center gap-2">
                       {checklistStatus.onCalibration ? (
                         <CheckCircle className="w-4 h-4 text-green-500" />
@@ -1066,31 +1236,92 @@ CODE STRUCTURE:
                         <XCircle className="w-4 h-4 text-red-500" />
                       )}
                       <span className="text-gray-700 dark:text-gray-300">Calibration Network</span>
+                      {!checklistStatus.onCalibration && (
+                        <span className="text-xs text-orange-600 dark:text-orange-400 ml-2">
+                          (Switch to Calibration network in wallet)
+                        </span>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2">
+
+                    <button
+                      onClick={() => window.open(filFaucetUrl, '_blank')}
+                      disabled={checklistStatus.hasEnoughFil}
+                      className={`flex items-center gap-2 w-full text-left p-2 rounded-md transition-colors ${
+                        checklistStatus.hasEnoughFil
+                          ? 'cursor-default'
+                          : 'hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'
+                      }`}
+                    >
                       {checklistStatus.hasEnoughFil ? (
                         <CheckCircle className="w-4 h-4 text-green-500" />
                       ) : (
                         <XCircle className="w-4 h-4 text-red-500" />
                       )}
                       <span className="text-gray-700 dark:text-gray-300">{filTokenName} for Gas</span>
-                    </div>
-                    <div className="flex items-center gap-2">
+                      {!checklistStatus.hasEnoughFil && (
+                        <span className="text-xs text-blue-600 dark:text-blue-400 ml-auto">
+                          Click to get test {filTokenName}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={handleFixUSDFC}
+                      disabled={checklistStatus.hasEnoughUsdfc || isFixing === "usdfc"}
+                      className={`flex items-center gap-2 w-full text-left p-2 rounded-md transition-colors ${
+                        checklistStatus.hasEnoughUsdfc
+                          ? 'cursor-default'
+                          : 'hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'
+                      }`}
+                    >
                       {checklistStatus.hasEnoughUsdfc ? (
                         <CheckCircle className="w-4 h-4 text-green-500" />
+                      ) : isFixing === "usdfc" ? (
+                        <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
                       ) : (
                         <XCircle className="w-4 h-4 text-red-500" />
                       )}
                       <span className="text-gray-700 dark:text-gray-300">USDFC Deposited</span>
-                    </div>
-                    <div className="flex items-center gap-2">
+                      {!checklistStatus.hasEnoughUsdfc && isFixing !== "usdfc" && (
+                        <span className="text-xs text-blue-600 dark:text-blue-400 ml-auto">
+                          Click to deposit USDFC
+                        </span>
+                      )}
+                      {isFixing === "usdfc" && (
+                        <span className="text-xs text-blue-600 dark:text-blue-400 ml-auto">
+                          Depositing...
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={handleFixWarmStorage}
+                      disabled={checklistStatus.warmStorageApproved || isFixing === "warmstorage"}
+                      className={`flex items-center gap-2 w-full text-left p-2 rounded-md transition-colors ${
+                        checklistStatus.warmStorageApproved
+                          ? 'cursor-default'
+                          : 'hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'
+                      }`}
+                    >
                       {checklistStatus.warmStorageApproved ? (
                         <CheckCircle className="w-4 h-4 text-green-500" />
+                      ) : isFixing === "warmstorage" ? (
+                        <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
                       ) : (
                         <XCircle className="w-4 h-4 text-red-500" />
                       )}
                       <span className="text-gray-700 dark:text-gray-300">Storage Approved</span>
-                    </div>
+                      {!checklistStatus.warmStorageApproved && isFixing !== "warmstorage" && (
+                        <span className="text-xs text-blue-600 dark:text-blue-400 ml-auto">
+                          Click to approve storage
+                        </span>
+                      )}
+                      {isFixing === "warmstorage" && (
+                        <span className="text-xs text-blue-600 dark:text-blue-400 ml-auto">
+                          Approving...
+                        </span>
+                      )}
+                    </button>
                   </div>
                 </div>
               )}
@@ -1128,6 +1359,17 @@ CODE STRUCTURE:
                     Live Preview
                   </button>
                   <button
+                    onClick={() => setActiveTab('storage')}
+                    className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                      activeTab === 'storage'
+                        ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                  >
+                    <BarChart3 className="w-4 h-4" />
+                    Storage Balance
+                  </button>
+                  <button
                     onClick={() => setActiveTab('prompt')}
                     className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
                       activeTab === 'prompt'
@@ -1146,20 +1388,191 @@ CODE STRUCTURE:
                 <div className="h-full border border-gray-200 dark:border-gray-600 rounded-xl overflow-hidden bg-white dark:bg-gray-800">
                   {activeTab === 'preview' ? (
                     // Live Preview Tab
-                    htmlContent ? (
-                      <iframe
-                        srcDoc={htmlContent}
-                        className="w-full h-full"
-                        title="Site Preview"
-                        sandbox="allow-same-origin"
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
-                        <Wand2 className="w-16 h-16 mb-4 opacity-50" />
-                        <p className="text-lg font-medium">No Preview Yet</p>
-                        <p className="text-sm">Configure your sections and generate your landing page</p>
-                      </div>
-                    )
+                    <div className="h-full overflow-y-auto">
+                      {htmlContent ? (
+                        <iframe
+                          srcDoc={htmlContent}
+                          className="w-full h-full"
+                          title="Site Preview"
+                          sandbox="allow-same-origin"
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                        {/* Animated Building Blocks */}
+                        <div className="relative mb-6">
+                          <div className="flex flex-col gap-2 items-center">
+                            {/* Top row - Header block */}
+                            <motion.div
+                              className="w-20 h-4 bg-blue-200 dark:bg-blue-800 rounded-md shadow-sm"
+                              initial={isGenerating ? { opacity: 0, y: -20 } : { opacity: 1, y: 0 }}
+                              animate={
+                                isGenerating
+                                  ? {
+                                      opacity: [0, 1, 1, 0],
+                                      y: [-20, 0, 0, -20]
+                                    }
+                                  : { opacity: 1, y: 0 }
+                              }
+                              transition={
+                                isGenerating
+                                  ? {
+                                      duration: 2,
+                                      repeat: Infinity,
+                                      ease: "easeInOut"
+                                    }
+                                  : { duration: 0.6, delay: 0.1 }
+                              }
+                            />
+
+                            {/* Middle row - Content blocks */}
+                            <div className="flex gap-2">
+                              <motion.div
+                                className="w-12 h-8 bg-green-200 dark:bg-green-800 rounded-md shadow-sm"
+                                initial={isGenerating ? { opacity: 0, x: -20 } : { opacity: 1, x: 0 }}
+                                animate={
+                                  isGenerating
+                                    ? {
+                                        opacity: [0, 1, 1, 0],
+                                        x: [-20, 0, 0, -20]
+                                      }
+                                    : { opacity: 1, x: 0 }
+                                }
+                                transition={
+                                  isGenerating
+                                    ? {
+                                        duration: 2,
+                                        repeat: Infinity,
+                                        ease: "easeInOut",
+                                        delay: 0.3
+                                      }
+                                    : { duration: 0.6, delay: 0.3 }
+                                }
+                              />
+                              <motion.div
+                                className="w-16 h-8 bg-purple-200 dark:bg-purple-800 rounded-md shadow-sm"
+                                initial={isGenerating ? { opacity: 0, y: 20 } : { opacity: 1, y: 0 }}
+                                animate={
+                                  isGenerating
+                                    ? {
+                                        opacity: [0, 1, 1, 0],
+                                        y: [20, 0, 0, 20]
+                                      }
+                                    : { opacity: 1, y: 0 }
+                                }
+                                transition={
+                                  isGenerating
+                                    ? {
+                                        duration: 2,
+                                        repeat: Infinity,
+                                        ease: "easeInOut",
+                                        delay: 0.6
+                                      }
+                                    : { duration: 0.6, delay: 0.5 }
+                                }
+                              />
+                              <motion.div
+                                className="w-12 h-8 bg-orange-200 dark:bg-orange-800 rounded-md shadow-sm"
+                                initial={isGenerating ? { opacity: 0, x: 20 } : { opacity: 1, x: 0 }}
+                                animate={
+                                  isGenerating
+                                    ? {
+                                        opacity: [0, 1, 1, 0],
+                                        x: [20, 0, 0, 20]
+                                      }
+                                    : { opacity: 1, x: 0 }
+                                }
+                                transition={
+                                  isGenerating
+                                    ? {
+                                        duration: 2,
+                                        repeat: Infinity,
+                                        ease: "easeInOut",
+                                        delay: 0.9
+                                      }
+                                    : { duration: 0.6, delay: 0.7 }
+                                }
+                              />
+                            </div>
+
+                            {/* Bottom row - Footer block */}
+                            <motion.div
+                              className="w-24 h-3 bg-gray-200 dark:bg-gray-700 rounded-md shadow-sm"
+                              initial={isGenerating ? { opacity: 0, y: 20 } : { opacity: 1, y: 0 }}
+                              animate={
+                                isGenerating
+                                  ? {
+                                      opacity: [0, 1, 1, 0],
+                                      y: [20, 0, 0, 20]
+                                    }
+                                  : { opacity: 1, y: 0 }
+                              }
+                              transition={
+                                isGenerating
+                                  ? {
+                                      duration: 2,
+                                      repeat: Infinity,
+                                      ease: "easeInOut",
+                                      delay: 1.2
+                                    }
+                                  : { duration: 0.6, delay: 0.9 }
+                              }
+                            />
+                          </div>
+
+                          {/* Floating assembly sparkles */}
+                          <motion.div
+                            className="absolute -top-2 -right-2 w-2 h-2 bg-yellow-400 rounded-full"
+                            animate={{
+                              scale: [1, 1.5, 1],
+                              opacity: [0.5, 1, 0.5]
+                            }}
+                            transition={{
+                              duration: isGenerating ? 1 : 2,
+                              repeat: Infinity,
+                              delay: isGenerating ? 0 : 1.2
+                            }}
+                          />
+                          <motion.div
+                            className="absolute -bottom-1 -left-1 w-1.5 h-1.5 bg-blue-400 rounded-full"
+                            animate={{
+                              scale: [1, 1.2, 1],
+                              opacity: [0.7, 1, 0.7]
+                            }}
+                            transition={{
+                              duration: isGenerating ? 0.8 : 1.5,
+                              repeat: Infinity,
+                              delay: isGenerating ? 0.2 : 1.5
+                            }}
+                          />
+                        </div>
+
+                        <motion.p
+                          className="text-lg font-medium mb-2"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ duration: 0.6, delay: isGenerating ? 0 : 1.1 }}
+                        >
+                          {isGenerating ? "Building Your Page..." : "Ready to Build"}
+                        </motion.p>
+                        <motion.p
+                          className="text-sm text-center"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ duration: 0.6, delay: isGenerating ? 0.2 : 1.3 }}
+                        >
+                          {isGenerating
+                            ? "AI is assembling your professional landing page"
+                            : "Configure your sections and generate your landing page"
+                          }
+                        </motion.p>
+                        </div>
+                      )}
+                    </div>
+                  ) : activeTab === 'storage' ? (
+                    // Storage Balance Tab
+                    <div className="h-full overflow-y-auto p-6">
+                      <StorageManager />
+                    </div>
                   ) : (
                     // AI Prompt Tab
                     <div className="h-full flex flex-col">
@@ -1280,12 +1693,12 @@ CODE STRUCTURE:
                         <div>
                           <span className="font-medium">Live URL:</span>
                           <a
-                            href={publishedSite.accessUrl}
+                            href={cleanProductionUrl(publishedSite.accessUrl)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="ml-2 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline"
                           >
-                            {publishedSite.accessUrl}
+                            {cleanProductionUrl(publishedSite.accessUrl)}
                           </a>
                         </div>
                       </div>
