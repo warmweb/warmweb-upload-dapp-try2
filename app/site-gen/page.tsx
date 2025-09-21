@@ -708,14 +708,14 @@ CODE STRUCTURE:
       {/* Header */}
       <header className="bg-white dark:bg-dark-surface border-b border-gray-200 dark:border-gray-600 sticky top-0 z-50 transition-colors duration-300">
         <div className="flex items-center justify-between px-6 py-4">
-          <div className="flex items-center space-x-3">
+          <Link href="/" className="flex items-center space-x-3 hover:opacity-80 transition-opacity cursor-pointer">
             <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
               <Wand2 className="text-white text-sm" />
             </div>
             <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-              AI Landing Page Generator
+              WarmWeb Landing Page Generator
             </h1>
-          </div>
+          </Link>
 
           <div className="flex items-center space-x-4">
             {isConnected && (
