@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, useDisconnect } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { motion } from "framer-motion";
 import JSZip from "jszip";
@@ -117,6 +117,7 @@ export default function SiteGenPage() {
   const [activeTab, setActiveTab] = useState<'preview' | 'prompt'>('preview');
   const [generatedPrompt, setGeneratedPrompt] = useState('');
   const { isConnected, address, chainId } = useAccount();
+  const { disconnect } = useDisconnect();
 
   // Check if we're in development mode
   const isDev = process.env.NODE_ENV === 'development';
@@ -713,6 +714,12 @@ CODE STRUCTURE:
                 <div className="text-gray-600 dark:text-gray-400">
                   {parseFloat(balances.fil).toFixed(2)} {filTokenName}
                 </div>
+                <button
+                  onClick={() => disconnect()}
+                  className="px-3 py-1 text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-md hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+                >
+                  Disconnect
+                </button>
               </div>
             )}
             <Link href="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors">
