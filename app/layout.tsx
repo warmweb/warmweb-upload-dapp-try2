@@ -11,6 +11,7 @@ import { filecoin, filecoinCalibration } from "wagmi/chains";
 import { http, createConfig } from "@wagmi/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RainbowKitProvider } from "@rainbow-me/rainbowkit";
+import { getDefaultConfig } from "@rainbow-me/rainbowkit";
 import "@rainbow-me/rainbowkit/styles.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { SynapseProvider } from "@/providers/SynapseProvider";
@@ -19,9 +20,10 @@ import { rpcConfig } from "@/config";
 
 const queryClient = new QueryClient();
 
-const config = createConfig({
+const config = getDefaultConfig({
+  appName: 'WarmWeb',
+  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'warmweb-upload-dapp', // Fallback for development
   chains: [filecoinCalibration, filecoin],
-  connectors: [],
   transports: {
     [filecoin.id]: http(rpcConfig.primary.filecoinMainnet),
     [filecoinCalibration.id]: http(rpcConfig.primary.filecoinCalibration),
