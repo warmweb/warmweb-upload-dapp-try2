@@ -8,7 +8,7 @@ import { useSiteZip } from "@/hooks/useSiteZip";
 import { useSynapseClient } from "@/hooks/useSynapseClient";
 import { useBalances } from "@/hooks/useBalances";
 import { usePublishSite } from "@/hooks/usePublishSite";
-import { ArrowLeft, Download, Upload, Globe, Loader2, CheckCircle, XCircle, AlertCircle, Wand2, Eye, Sparkles, Settings, Users, Star, MessageSquare, Building, Award, Mail, BarChart3, FileText, Copy, Palette, Zap, ToggleLeft, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowLeft, Download, Upload, Globe, Loader2, CheckCircle, XCircle, AlertCircle, Wand2, Eye, Sparkles, Settings, Users, Star, MessageSquare, Building, Award, Mail, BarChart3, FileText, Copy, Palette, Zap, ToggleLeft, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { AILandingPageGenerator } from "@/lib/aiLandingPageGenerator";
 
@@ -149,24 +149,42 @@ export default function SiteGenPage() {
     ? "https://faucet.calibnet.chainsafe-fil.io/funds.html"
     : "https://faucet.filecoin.io/";
 
-  // Load balances when connected
+  // Load balances when connected (with delay for initialization)
   useEffect(() => {
     const loadBalances = async () => {
       if (!isConnected || balances !== null) return;
-      
-      setIsLoadingBalances(true);
-      try {
-        const balanceData = await getBalances();
-        setBalances(balanceData);
-      } catch (error) {
-        console.error("Failed to load balances:", error);
-      } finally {
-        setIsLoadingBalances(false);
-      }
+
+      // Defer balance loading by 2 seconds to allow component initialization
+      setTimeout(async () => {
+        setIsLoadingBalances(true);
+        try {
+          const balanceData = await getBalances();
+          setBalances(balanceData);
+        } catch (error) {
+          console.error("Failed to load balances:", error);
+        } finally {
+          setIsLoadingBalances(false);
+        }
+      }, 2000);
     };
-    
+
     loadBalances();
   }, [isConnected, balances]);
+
+  // Manual refresh balances function
+  const handleRefreshBalances = async () => {
+    if (!isConnected) return;
+
+    setIsLoadingBalances(true);
+    try {
+      const balanceData = await getBalances();
+      setBalances(balanceData);
+    } catch (error) {
+      console.error("Failed to refresh balances:", error);
+    } finally {
+      setIsLoadingBalances(false);
+    }
+  };
 
   // Check all requirements for upload
   const checkUploadRequirements = async () => {
@@ -714,6 +732,14 @@ CODE STRUCTURE:
                 <div className="text-gray-600 dark:text-gray-400">
                   {parseFloat(balances.fil).toFixed(2)} {filTokenName}
                 </div>
+                <button
+                  onClick={handleRefreshBalances}
+                  disabled={isLoadingBalances}
+                  className="p-1 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors disabled:opacity-50"
+                  title="Refresh balances"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isLoadingBalances ? 'animate-spin' : ''}`} />
+                </button>
                 <button
                   onClick={() => disconnect()}
                   className="px-3 py-1 text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-md hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
