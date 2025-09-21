@@ -130,7 +130,7 @@ export default function SiteGenPage() {
     try {
       const urlObj = new URL(url);
       // Remove port in production if it's a standard port or development port
-      if (urlObj.port && (urlObj.port === '3000' || urlObj.port === '8080' || urlObj.port === '80' || urlObj.port === '443')) {
+      if (urlObj.port && (urlObj.port === '3000' || urlObj.port === '8080' || urlObj.port === '80' || urlObj.port === '443' || urlObj.port === '10000')) {
         urlObj.port = '';
       }
       return urlObj.toString();
